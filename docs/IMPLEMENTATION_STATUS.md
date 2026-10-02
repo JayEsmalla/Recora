@@ -7,8 +7,8 @@
 - Phase 2 — capture and image preparation: implementation complete; physical-device camera QA remains part of release hardening
 - Phase 3 — offline OCR: implementation complete; native-device offline runtime proof remains required before the release gate
 - Phase 4 — receipt reconstruction parser: implementation complete; broader real-receipt corpus measurement remains part of Phase 8
-- Phase 5 — validation and confidence: next
-- Phase 6 — review and correction: pending
+- Phase 5 — validation and confidence: implementation complete on the controlled validation corpus; real-receipt false-mismatch measurement remains part of Phase 8
+- Phase 6 — review and correction: next
 - Phase 7 — history, search, and price history: pending
 - Phase 8 — corpus-driven QA and hardening: pending
 - Phase 9 — release-candidate polish: pending
@@ -112,6 +112,33 @@ Validation:
 - focused parser/date/amount tests pass
 - full `npm run check` passes
 - real-receipt accuracy metrics are deliberately not claimed yet; those remain Phase 8 corpus work
+
+## Phase 5 Evidence
+
+Implemented:
+- line arithmetic validation for quantity × unit price vs line total
+- item-total sum vs explicit subtotal reconciliation
+- subtotal/items plus signed discounts, taxes, service charges, and rounding vs final total
+- missing-total and missing-item blocking states
+- ambiguous/malformed/future date review states
+- zero/negative purchase-line review state without applying that assumption to return receipts
+- parser warning propagation to affected review fields
+- explicit Verified / Review / Mismatch report state
+- field-level confidence basis points with documented reasons
+- native OCR confidence is used only when an engine actually supplies it; the current ML Kit adapter remains `null` and no OCR confidence is fabricated
+- restart-safe parser + validation analysis over persisted OCR evidence
+
+Controlled validation corpus:
+- 4 intentionally valid deterministic cases
+- 4 intentionally mismatched deterministic cases
+- deterministic mismatch detection: 100% in this synthetic controlled corpus
+- false mismatch rate: 0% in this synthetic controlled corpus
+- these figures are engineering regression evidence only and are not claims about real-receipt accuracy
+
+Validation:
+- focused validation/confidence/integration tests pass
+- full project validation is required before publication of this phase
+- real-receipt false-mismatch measurement remains reserved for Phase 8
 
 ## Release-gate verification still required
 
