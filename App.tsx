@@ -31,8 +31,13 @@ import {
   type StoredOcrRun,
 } from './src/data/repositories/OcrRepository';
 import { ReceiptRepository } from './src/data/repositories/ReceiptRepository';
+import type { Receipt } from './src/domain/receipt';
 import { MlKitOcrEngine } from './src/ocr/MlKitOcrEngine';
 import { OcrProcessingService } from './src/ocr/OcrProcessingService';
+import { ParserProcessingService } from './src/parser/ParserProcessingService';
+import { ReceiptReviewScreen } from './src/review/ReceiptReviewScreen';
+import { ReviewService } from './src/review/ReviewService';
+import type { ReviewDraft, ReviewSession } from './src/review/types';
 
 type BootState = 'loading' | 'ready' | 'error';
 type AppScreen =
@@ -42,7 +47,11 @@ type AppScreen =
   | 'prepared'
   | 'ocr-processing'
   | 'ocr-result'
-  | 'ocr-error';
+  | 'ocr-error'
+  | 'review-loading'
+  | 'review'
+  | 'review-error'
+  | 'saved';
 
 export default function App() {
   const [bootState, setBootState] = useState<BootState>('loading');
@@ -53,6 +62,8 @@ export default function App() {
   const [preparedReceiptId, setPreparedReceiptId] = useState<string | null>(null);
   const [ocrRun, setOcrRun] = useState<StoredOcrRun | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
+  const [pendingReceipts, setPendingReceipts] = useState<Receipt[]>([]);
   const recoveryAttempted = useRef(false);
   const ocrAbortController = useRef<AbortController | null>(null);
 
@@ -60,11 +71,17 @@ export default function App() {
     let mounted = true;
 
     openRecoraDatabase()
-      .then(async () => {
+      .then(async (database) => {
         if (!mounted) {
           return;
         }
 
+        const pending = await new ReceiptRepository(database).listUnfinished();
+        if (!mounted) {
+          return;
+        }
+
+        setPendingReceipts(pending);
         setBootState('ready');
 
         if (!recoveryAttempted.current) {
@@ -146,6 +163,7 @@ export default function App() {
         imageHeight: retained.height,
         now,
       });
+      setPendingReceipts(await repository.listUnfinished());
 
       if (source) {
         removePrivateReceiptImage(source.uri);
@@ -190,6 +208,7 @@ export default function App() {
       }
 
       setOcrRun(run);
+      await refreshPendingReceipts();
       setScreen('ocr-result');
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) {
@@ -217,6 +236,111 @@ export default function App() {
     setMessage('Cancelling text recognition…');
   }
 
+  async function refreshPendingReceipts(): Promise<void> {
+    const database = await openRecoraDatabase();
+    const repository = new ReceiptRepository(database);
+    setPendingReceipts(await repository.listUnfinished());
+  }
+
+  async function createReviewService(): Promise<ReviewService> {
+    const database = await openRecoraDatabase();
+    const receipts = new ReceiptRepository(database);
+    const ocr = new OcrRepository(database);
+    return new ReviewService(
+      receipts,
+      ocr,
+      new ParserProcessingService(ocr),
+    );
+  }
+
+  async function openReview(receiptId: string): Promise<void> {
+    setPreparedReceiptId(receiptId);
+    setMessage(null);
+    setScreen('review-loading');
+
+    try {
+      const service = await createReviewService();
+      const session = await service.load(receiptId);
+      setReviewSession(session);
+      await refreshPendingReceipts();
+      setScreen('review');
+    } catch (error) {
+      setOcrError(
+        messageFromError(
+          error,
+          'Recora could not prepare this receipt for review.',
+        ),
+      );
+      setScreen('review-error');
+    }
+  }
+
+  async function saveReviewDraft(
+    draft: ReviewDraft,
+  ): Promise<ReviewSession> {
+    const receiptId = reviewSession?.receipt.id ?? preparedReceiptId;
+    if (!receiptId) {
+      throw new Error('No active receipt review was found.');
+    }
+
+    const service = await createReviewService();
+    const session = await service.saveDraft(receiptId, draft);
+    setReviewSession(session);
+    await refreshPendingReceipts();
+    return session;
+  }
+
+  async function acceptReviewedReceipt(
+    draft: ReviewDraft,
+    acknowledgeReview: boolean,
+  ): Promise<void> {
+    const receiptId = reviewSession?.receipt.id ?? preparedReceiptId;
+    if (!receiptId) {
+      throw new Error('No active receipt review was found.');
+    }
+
+    const service = await createReviewService();
+    await service.saveAccepted(receiptId, draft, acknowledgeReview);
+    setReviewSession(null);
+    setPreparedReceiptId(null);
+    setOcrRun(null);
+    await refreshPendingReceipts();
+    setScreen('saved');
+  }
+
+  async function discardReviewedReceipt(): Promise<void> {
+    const receiptId = reviewSession?.receipt.id ?? preparedReceiptId;
+    if (!receiptId) {
+      throw new Error('No active receipt review was found.');
+    }
+
+    const service = await createReviewService();
+    const imageUri = await service.discard(receiptId);
+    if (imageUri) {
+      removePrivateReceiptImage(imageUri);
+    }
+
+    setReviewSession(null);
+    setPreparedReceiptId(null);
+    setOcrRun(null);
+    setMessage(null);
+    await refreshPendingReceipts();
+    setScreen('home');
+  }
+
+  async function resumeReceipt(receipt: Receipt): Promise<void> {
+    setPreparedReceiptId(receipt.id);
+    setOcrRun(null);
+    setMessage(null);
+
+    if (receipt.status === 'review' || receipt.rawOcrText) {
+      await openReview(receipt.id);
+      return;
+    }
+
+    setScreen('prepared');
+  }
+
   if (bootState !== 'ready') {
     return <BootScreen state={bootState} />;
   }
@@ -230,6 +354,94 @@ export default function App() {
           onCancel={cancelEditing}
           onReady={savePreparedDraft}
         />
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'review-loading') {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.bootTitle}>Reconstructing receipt</Text>
+          <Text style={styles.centeredBody}>
+            Recora is rebuilding structured items from saved OCR evidence and
+            checking the arithmetic before review.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'review' && reviewSession) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <ReceiptReviewScreen
+          initialSession={reviewSession}
+          onSaveDraft={saveReviewDraft}
+          onAccept={acceptReviewedReceipt}
+          onDiscard={discardReviewedReceipt}
+          onBack={() => setScreen('home')}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'review-error') {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <Text style={styles.errorMark}>!</Text>
+          <Text style={styles.bootTitle}>Receipt review could not open</Text>
+          <Text style={styles.centeredBody}>
+            {ocrError ??
+              'The receipt draft remains stored locally and can be retried.'}
+          </Text>
+          {preparedReceiptId ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => openReview(preparedReceiptId)}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Retry review</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScreen('home')}
+            style={styles.secondaryWideButton}
+          >
+            <Text style={styles.secondaryWideButtonText}>Back to home</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'saved') {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <View style={styles.successMark}>
+            <Text style={styles.successMarkText}>✓</Text>
+          </View>
+          <Text style={styles.pageTitle}>Receipt saved.</Text>
+          <Text style={styles.centeredBody}>
+            The reviewed receipt is now part of local purchase history. Only the
+            values you confirmed are used for tracking.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScreen('home')}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Back to home</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -379,16 +591,25 @@ export default function App() {
             </Text>
           </View>
 
+          {preparedReceiptId ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => openReview(preparedReceiptId)}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Review reconstructed receipt</Text>
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             onPress={() => {
-              setPreparedReceiptId(null);
               setOcrRun(null);
               setScreen('home');
             }}
-            style={styles.primaryButton}
+            style={styles.secondaryWideButton}
           >
-            <Text style={styles.primaryButtonText}>Back to home</Text>
+            <Text style={styles.secondaryWideButtonText}>Back to home</Text>
           </Pressable>
         </ScrollView>
       </SafeAreaView>
@@ -468,6 +689,30 @@ export default function App() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
+
+        {pendingReceipts[0] ? (
+          <View style={styles.foundationCard}>
+            <Text style={styles.sectionLabel}>UNFINISHED RECEIPT</Text>
+            <Text style={styles.foundationTitle}>
+              {pendingReceipts[0].status === 'review'
+                ? 'Continue receipt review'
+                : pendingReceipts[0].rawOcrText
+                  ? 'Review reconstructed receipt'
+                  : 'Continue receipt processing'}
+            </Text>
+            <Text style={styles.foundationText}>
+              Recora kept this draft locally so an interrupted scan or review does
+              not become completed purchase history.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => resumeReceipt(pendingReceipts[0]!)}
+              style={styles.resumeButton}
+            >
+              <Text style={styles.resumeButtonText}>Resume receipt</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.foundationCard}>
           <Text style={styles.sectionLabel}>CURRENT BUILD</Text>
@@ -691,6 +936,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
+  },
+  resumeButton: {
+    alignSelf: 'flex-start',
+    minHeight: 42,
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingHorizontal: 14,
+    borderRadius: 11,
+    backgroundColor: '#3F6B5B',
+  },
+  resumeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
   },
   guideCard: {
     backgroundColor: '#FFFFFF',

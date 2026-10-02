@@ -81,15 +81,25 @@ function validateCriticalFields(
     });
   } else {
     const parsed = parseLocalDate(candidate.date.isoDateTime);
-    const futureLimit = now.getTime() + 24 * 60 * 60 * 1000;
-    if (parsed !== null && parsed > futureLimit) {
+    if (parsed === null) {
       issues.push({
-        code: 'future-date',
+        code: 'ambiguous-date',
         state: 'review',
         fieldPath: 'receipt.date',
-        message: 'Purchase date is unexpectedly in the future.',
+        message: 'Purchase date is not a valid local date/time.',
         observationIds: candidate.date.observationIds,
       });
+    } else {
+      const futureLimit = now.getTime() + 24 * 60 * 60 * 1000;
+      if (parsed > futureLimit) {
+        issues.push({
+          code: 'future-date',
+          state: 'review',
+          fieldPath: 'receipt.date',
+          message: 'Purchase date is unexpectedly in the future.',
+          observationIds: candidate.date.observationIds,
+        });
+      }
     }
   }
 
@@ -146,8 +156,55 @@ function validateLineItems(
   counters: ValidationCounters,
   tolerance: number,
 ): void {
+  const seen = new Map<string, string>();
+
   for (const item of candidate.items) {
     const fieldPath = `items.${item.id}`;
+
+    if (!item.rawName.trim()) {
+      issues.push({
+        code: 'missing-item-name',
+        state: 'mismatch',
+        fieldPath,
+        message: 'Item name is required before this receipt can be accepted.',
+        observationIds: item.observationIds,
+      });
+    }
+
+    if (item.lineTotalMinor === null) {
+      issues.push({
+        code: 'missing-line-total',
+        state: 'mismatch',
+        fieldPath,
+        message: 'Item line total is required before this receipt can be accepted.',
+        observationIds: item.observationIds,
+      });
+    }
+
+    const duplicateKey = [
+      item.rawName.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim(),
+      item.lineTotalMinor ?? 'null',
+    ].join('|');
+    const duplicateOf = seen.get(duplicateKey);
+
+    if (
+      duplicateOf &&
+      !issues.some(
+        (issue) =>
+          issue.code === 'possible-duplicate-line' &&
+          issue.fieldPath === fieldPath,
+      )
+    ) {
+      issues.push({
+        code: 'possible-duplicate-line',
+        state: 'review',
+        fieldPath,
+        message: `"${item.rawName}" duplicates another item name and amount; confirm both rows are real purchases.`,
+        observationIds: item.observationIds,
+      });
+    } else if (!duplicateOf) {
+      seen.set(duplicateKey, item.id);
+    }
 
     if (
       candidate.transactionType === 'purchase' &&

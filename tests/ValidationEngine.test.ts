@@ -141,6 +141,30 @@ describe('validateReceiptCandidate', () => {
     );
   });
 
+  it('blocks an item with a missing name or line total', () => {
+    const candidate = validCandidate();
+    candidate.items[0]!.rawName = '';
+    candidate.items[1]!.lineTotalMinor = null;
+    candidate.summary.subtotalMinor = null;
+    candidate.summary.totalMinor = 8000;
+
+    const report = validateReceiptCandidate(candidate, { now });
+
+    expect(report.state).toBe('mismatch');
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'missing-item-name',
+          fieldPath: 'items.item-1',
+        }),
+        expect.objectContaining({
+          code: 'missing-line-total',
+          fieldPath: 'items.item-2',
+        }),
+      ]),
+    );
+  });
+
   it('flags a purchase item with a zero or negative line amount for review', () => {
     const candidate = validCandidate();
     candidate.items[1]!.lineTotalMinor = 0;

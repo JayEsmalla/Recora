@@ -8,8 +8,8 @@
 - Phase 3 — offline OCR: implementation complete; native-device offline runtime proof remains required before the release gate
 - Phase 4 — receipt reconstruction parser: implementation complete; broader real-receipt corpus measurement remains part of Phase 8
 - Phase 5 — validation and confidence: implementation complete on the controlled validation corpus; real-receipt false-mismatch measurement remains part of Phase 8
-- Phase 6 — review and correction: next
-- Phase 7 — history, search, and price history: pending
+- Phase 6 — review and correction: implementation complete; physical-device review ergonomics remain part of release hardening
+- Phase 7 — history, search, and price history: next
 - Phase 8 — corpus-driven QA and hardening: pending
 - Phase 9 — release-candidate polish: pending
 
@@ -137,8 +137,36 @@ Controlled validation corpus:
 
 Validation:
 - focused validation/confidence/integration tests pass
-- full project validation is required before publication of this phase
+- full project validation passed before publication
 - real-receipt false-mismatch measurement remains reserved for Phase 8
+
+## Phase 6 Evidence
+
+Implemented:
+- structured receipt review for merchant, date/time, transaction type, subtotal, final total, line items, quantities, unit prices, line totals, discounts, taxes, service charges, rounding, and other adjustments
+- live validation recalculation after manual edits
+- explicit Verified / Review / Mismatch states using text and iconography rather than color alone
+- issue list with field navigation for faster correction
+- add/remove item rows and adjustment rows
+- invalid editable values remain visible and cannot pollute persisted review data
+- missing item name and missing line total are blocking mismatches
+- non-blocking review warnings require explicit user acknowledgement before acceptance
+- original retained image and raw OCR text remain available as read-only verification evidence
+- review edits never overwrite raw OCR evidence
+- first review is persisted immediately when structurally valid so app restart can recover it
+- later review saves preserve corrected values instead of reparsing over them
+- unfinished receipt recovery is exposed from the home screen
+- final accepted receipt, line items, adjustments, validation states, and confidence values are written atomically
+- failed child persistence rolls back final acceptance
+- discard removes the unfinished receipt and dependent OCR evidence and returns the private image URI for file cleanup
+- OCR observation storage IDs are namespaced by OCR run so identical logical ML Kit IDs from separate receipts cannot collide
+- receipt-scoped review row IDs prevent item-row primary-key collisions across receipts
+
+Validation:
+- focused review, repository integrity, OCR isolation, and validation tests pass
+- full `npm run check` passes
+- Android Expo/Hermes export bundles successfully
+- physical-device form ergonomics, keyboard behavior, image evidence readability, and interruption behavior remain part of Phase 8/9 device QA
 
 ## Release-gate verification still required
 

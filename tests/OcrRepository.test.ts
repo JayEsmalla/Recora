@@ -126,6 +126,37 @@ describe('OcrRepository', () => {
     expect(count?.count).toBe(1);
   });
 
+  it('keeps identical logical observation ids isolated across receipts', async () => {
+    await receipts.createDraft({
+      id: 'receipt-2',
+      imageUri: 'file:///private/receipt-2.jpg',
+      now,
+    });
+
+    await ocr.replaceForReceipt('receipt-1', document, now);
+    await ocr.replaceForReceipt('receipt-2', document, now);
+
+    const first = await ocr.getForReceipt('receipt-1');
+    const second = await ocr.getForReceipt('receipt-2');
+
+    expect(first?.observations.find((item) => item.id === 'b0-l1-e1')?.text).toBe(
+      '85.00',
+    );
+    expect(second?.observations.find((item) => item.id === 'b0-l1-e1')?.text).toBe(
+      '85.00',
+    );
+
+    const storedIds = await database.all<{ id: string }>(
+      `SELECT id FROM ocr_observations
+       WHERE id LIKE ?
+       ORDER BY id ASC;`,
+      ['%::b0-l1-e1'],
+    );
+
+    expect(storedIds).toHaveLength(2);
+    expect(storedIds[0]?.id).not.toBe(storedIds[1]?.id);
+  });
+
   it('cascades OCR evidence when its receipt is deleted', async () => {
     await ocr.replaceForReceipt('receipt-1', document, now);
 

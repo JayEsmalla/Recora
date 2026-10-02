@@ -68,6 +68,49 @@ describe('ReceiptRepository', () => {
     expect(accepted[0]?.totalMinor).toBe(19000);
   });
 
+  it('preserves raw OCR evidence while storing corrected review data', async () => {
+    await repository.createDraft({
+      id: 'receipt-ocr',
+      rawOcrText: 'RAW OCR TEXT',
+      now,
+    });
+
+    await repository.replaceReviewData({
+      receiptId: 'receipt-ocr',
+      merchantRawName: 'Corrected Store',
+      totalMinor: 5000,
+      validationState: 'review',
+      lineItems: [],
+      adjustments: [],
+      now,
+    });
+
+    const receipt = await repository.getById('receipt-ocr');
+    expect(receipt?.rawOcrText).toBe('RAW OCR TEXT');
+    expect(receipt?.merchantRawName).toBe('Corrected Store');
+  });
+
+  it('lists unaccepted drafts separately from accepted history', async () => {
+    await repository.createDraft({ id: 'pending', now });
+    await repository.createDraft({ id: 'accepted', now });
+    await repository.replaceReviewData({
+      receiptId: 'accepted',
+      totalMinor: 100,
+      validationState: 'verified',
+      lineItems: [],
+      adjustments: [],
+      now,
+    });
+    await repository.acceptReceipt('accepted', now);
+
+    expect((await repository.listUnfinished()).map((receipt) => receipt.id)).toEqual([
+      'pending',
+    ]);
+    expect((await repository.listAccepted()).map((receipt) => receipt.id)).toEqual([
+      'accepted',
+    ]);
+  });
+
   it('does not allow an unreviewed draft to become accepted', async () => {
     await repository.createDraft({ id: 'receipt-1', now });
 

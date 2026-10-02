@@ -7,6 +7,8 @@ export type ValidationIssueCode =
   | 'future-date'
   | 'missing-total'
   | 'missing-items'
+  | 'missing-item-name'
+  | 'missing-line-total'
   | 'line-arithmetic-mismatch'
   | 'subtotal-mismatch'
   | 'total-mismatch'

@@ -75,9 +75,11 @@ export class OcrRepository {
             x, y, width, height, confidence
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           [
-            observation.id,
+            persistedObservationId(runId, observation.id),
             runId,
-            observation.parentId,
+            observation.parentId
+              ? persistedObservationId(runId, observation.parentId)
+              : null,
             observation.kind,
             observation.position,
             observation.text,
@@ -139,7 +141,7 @@ export class OcrRepository {
       imageHeight: run.image_height,
       rawText: run.raw_text,
       createdAt: run.created_at,
-      observations: rows.map(mapObservation),
+      observations: rows.map((row) => mapObservation(row, run.id)),
     };
   }
 }
@@ -209,10 +211,15 @@ function flattenDocument(document: OcrDocument): StoredOcrObservation[] {
   return observations;
 }
 
-function mapObservation(row: OcrObservationRow): StoredOcrObservation {
+function mapObservation(
+  row: OcrObservationRow,
+  runId: string,
+): StoredOcrObservation {
   return {
-    id: row.id,
-    parentId: row.parent_id,
+    id: logicalObservationId(runId, row.id),
+    parentId: row.parent_id
+      ? logicalObservationId(runId, row.parent_id)
+      : null,
     kind: row.kind,
     position: row.position,
     text: row.text,
@@ -224,4 +231,15 @@ function mapObservation(row: OcrObservationRow): StoredOcrObservation {
     },
     confidence: row.confidence,
   };
+}
+
+function persistedObservationId(runId: string, observationId: string): string {
+  return `${runId}::${observationId}`;
+}
+
+function logicalObservationId(runId: string, persistedId: string): string {
+  const prefix = `${runId}::`;
+  return persistedId.startsWith(prefix)
+    ? persistedId.slice(prefix.length)
+    : persistedId;
 }
