@@ -6,16 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F7F6F2"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ywach.recora"
     },
     "android": {
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#F7F6F2",
         "foregroundImage": "./assets/android-icon-foreground.png",

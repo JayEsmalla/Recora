@@ -251,7 +251,7 @@ function buildSummary(
     warnings.push({
       code: 'multiple-total-candidates',
       message:
-        'Multiple final-total candidates were found. The lowest receipt candidate was selected for review.',
+        'Multiple final-total candidates were found. The bottom-most receipt candidate was selected for review and the alternatives were preserved.',
       observationIds: usableTotals.map((line) => line.line.id),
     });
   }
@@ -266,8 +266,21 @@ function buildSummary(
   return {
     subtotalMinor: subtotal?.amountMinor ?? null,
     subtotalSourceIds: subtotal ? [subtotal.line.id] : [],
+    subtotalAlternatives: subtotals
+      .filter(
+        (line): line is ParsedSummaryLine & { amountMinor: number } =>
+          line.amountMinor !== null,
+      )
+      .map((line) => ({
+        amountMinor: line.amountMinor,
+        observationIds: [line.line.id],
+      })),
     totalMinor: total?.amountMinor ?? null,
     totalSourceIds: total ? [total.line.id] : [],
+    totalAlternatives: usableTotals.map((line) => ({
+      amountMinor: line.amountMinor,
+      observationIds: [line.line.id],
+    })),
     adjustments: adjustmentLines
       .map((line) => line.adjustment)
       .filter(

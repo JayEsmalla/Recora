@@ -75,10 +75,12 @@ export function computeOcrResize(
   width: number,
   height: number,
   maxPixels = 12_000_000,
-  minimumShortEdge = 900,
 ): { width: number; height: number } {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     throw new Error('Image dimensions must be positive finite numbers.');
+  }
+  if (!Number.isFinite(maxPixels) || maxPixels <= 0) {
+    throw new Error('Maximum OCR pixel budget must be a positive finite number.');
   }
 
   const pixels = width * height;
@@ -86,14 +88,15 @@ export function computeOcrResize(
     return { width: Math.round(width), height: Math.round(height) };
   }
 
-  const pixelScale = Math.sqrt(maxPixels / pixels);
-  const shortEdge = Math.min(width, height);
-  const shortEdgeScale = Math.min(1, minimumShortEdge / shortEdge);
-  const scale = Math.min(1, Math.max(pixelScale, shortEdgeScale));
+  // The memory ceiling is non-negotiable. Very long receipts can make it
+  // impossible to preserve a preferred short edge without exceeding the pixel
+  // budget, so maxPixels wins and the quality gate surfaces the long-receipt
+  // warning for manual review.
+  const scale = Math.min(1, Math.sqrt(maxPixels / pixels));
 
   return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale)),
   };
 }
 

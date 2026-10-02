@@ -154,6 +154,16 @@ export class ReceiptRepository {
     };
   }
 
+  async listImageUris(): Promise<string[]> {
+    const rows = await this.database.all<{ image_uri: string }>(
+      `SELECT image_uri
+       FROM receipts
+       WHERE image_uri IS NOT NULL
+       ORDER BY created_at ASC;`,
+    );
+    return rows.map((row) => row.image_uri);
+  }
+
   async listUnfinished(limit = 20): Promise<Receipt[]> {
     const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
     const rows = await this.database.all<ReceiptRow>(

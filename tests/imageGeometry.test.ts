@@ -73,11 +73,25 @@ describe('receipt image geometry', () => {
     });
   });
 
-  it('limits huge images while protecting receipt text width', () => {
+  it('limits huge images to the configured OCR memory budget', () => {
     const resized = computeOcrResize(2400, 12000);
 
-    expect(resized.width).toBeGreaterThanOrEqual(900);
     expect(resized.width).toBeLessThan(2400);
     expect(resized.height).toBeLessThan(12000);
+    expect(resized.width * resized.height).toBeLessThanOrEqual(12_000_000);
+  });
+
+  it('never violates the pixel budget for extremely long receipts', () => {
+    const resized = computeOcrResize(1000, 100_000);
+
+    expect(resized.width * resized.height).toBeLessThanOrEqual(12_000_000);
+    expect(resized.width).toBeGreaterThan(0);
+    expect(resized.height).toBeGreaterThan(0);
+  });
+
+  it('rejects an invalid OCR pixel budget', () => {
+    expect(() => computeOcrResize(1000, 2000, 0)).toThrow(
+      'Maximum OCR pixel budget',
+    );
   });
 });

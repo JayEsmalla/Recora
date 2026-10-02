@@ -1,5 +1,7 @@
 # Recora Development Roadmap
 
+> **Implementation status:** Phases 0–9 are implemented. Final release-quality claims remain gated by physical-device and real-receipt evidence that cannot be produced by repository automation alone. See [Implementation Status](IMPLEMENTATION_STATUS.md) and [QA and Release Evidence](QA_AND_RELEASE.md).
+
 ## Product Contract
 
 Recora is an offline-first mobile receipt reconstruction and purchase tracking application.
@@ -123,8 +125,8 @@ Deliverables:
 - receipt-focused framing guidance
 - crop and rotation workflow
 - orientation normalization
-- perspective/deskew hook
-- conservative brightness/contrast/readability enhancement
+- perspective/deskew extension hook so a proven native geometry corrector can be added without changing the capture contract
+- conservative readability preservation through crop, rotation, bounded resizing, and high-quality JPEG preparation; automatic brightness/contrast filters are intentionally excluded until corpus evidence proves they improve rather than damage thermal text
 - quality gate for severe blur, darkness, clipping, and incomplete framing
 - private image retention policy
 

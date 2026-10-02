@@ -18,6 +18,8 @@ import {
 } from './src/capture/CaptureService';
 import { ReceiptImageEditor } from './src/capture/ReceiptImageEditor';
 import {
+  clearStagedReceiptImages,
+  pruneOrphanedReceiptImages,
   removePrivateReceiptImage,
   retainPreparedReceiptImage,
 } from './src/capture/ReceiptImageStore';
@@ -48,7 +50,10 @@ import type {
   ReceiptHistoryDetail,
 } from './src/history/types';
 import { MlKitOcrEngine } from './src/ocr/MlKitOcrEngine';
-import { OcrProcessingService } from './src/ocr/OcrProcessingService';
+import {
+  OcrProcessingService,
+  type OcrProgressEvent,
+} from './src/ocr/OcrProcessingService';
 import { ParserProcessingService } from './src/parser/ParserProcessingService';
 import { ReceiptReviewScreen } from './src/review/ReceiptReviewScreen';
 import { ReviewService } from './src/review/ReviewService';
@@ -84,6 +89,7 @@ export default function App() {
   const [preparedReceiptId, setPreparedReceiptId] = useState<string | null>(null);
   const [ocrRun, setOcrRun] = useState<StoredOcrRun | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<OcrProgressEvent | null>(null);
   const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
   const [pendingReceipts, setPendingReceipts] = useState<Receipt[]>([]);
   const [historyOverview, setHistoryOverview] = useState<HistoryOverview | null>(null);
@@ -104,7 +110,16 @@ export default function App() {
           return;
         }
 
-        const pending = await new ReceiptRepository(database).listUnfinished();
+        const repository = new ReceiptRepository(database);
+
+        try {
+          clearStagedReceiptImages();
+          pruneOrphanedReceiptImages(await repository.listImageUris());
+        } catch (error) {
+          console.warn('Recora startup storage cleanup could not finish.', error);
+        }
+
+        const pending = await repository.listUnfinished();
         if (!mounted) {
           return;
         }
@@ -215,6 +230,7 @@ export default function App() {
     const controller = new AbortController();
     ocrAbortController.current = controller;
     setOcrError(null);
+    setOcrProgress(null);
     setMessage(null);
     setScreen('ocr-processing');
 
@@ -229,6 +245,9 @@ export default function App() {
       const run = await service.process({
         receiptId,
         signal: controller.signal,
+        onProgress(event) {
+          setOcrProgress(event);
+        },
       });
 
       if (controller.signal.aborted) {
@@ -812,10 +831,19 @@ export default function App() {
         <StatusBar style="dark" />
         <View style={styles.centeredPage}>
           <ActivityIndicator size="large" />
-          <Text style={styles.bootTitle}>Reading receipt on this device</Text>
+          <Text style={styles.bootTitle}>
+            {ocrProgressTitle(ocrProgress?.stage)}
+          </Text>
           <Text style={styles.centeredBody}>
-            Recora is running the bundled Latin OCR model locally. No network
-            connection or remote OCR service is required.
+            {ocrProgressMessage(ocrProgress?.stage)}
+          </Text>
+          <Text
+            accessibilityLiveRegion="polite"
+            style={styles.progressMeta}
+          >
+            {ocrProgress
+              ? `Local processing · ${Math.max(0, Math.round(ocrProgress.elapsedMs))} ms elapsed`
+              : 'Starting local processing…'}
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -1103,6 +1131,44 @@ function InlineError({ message }: { message: string }) {
 
 function createReceiptId(): string {
   return `receipt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function ocrProgressTitle(
+  stage: OcrProgressEvent['stage'] | undefined,
+): string {
+  switch (stage) {
+    case 'loading-receipt':
+      return 'Opening retained receipt';
+    case 'recognizing-text':
+      return 'Reading text on this device';
+    case 'redacting-sensitive-data':
+      return 'Protecting sensitive payment text';
+    case 'persisting-evidence':
+      return 'Saving OCR evidence locally';
+    case 'complete':
+      return 'Offline OCR complete';
+    default:
+      return 'Preparing offline text recognition';
+  }
+}
+
+function ocrProgressMessage(
+  stage: OcrProgressEvent['stage'] | undefined,
+): string {
+  switch (stage) {
+    case 'loading-receipt':
+      return 'Recora is loading the private receipt image and validating its retained dimensions.';
+    case 'recognizing-text':
+      return 'The bundled Latin OCR model is recognizing text locally. No remote OCR service is used.';
+    case 'redacting-sensitive-data':
+      return 'Recora is redacting detected full payment-card numbers before OCR evidence is stored.';
+    case 'persisting-evidence':
+      return 'Recognized text and geometry are being committed to the local database.';
+    case 'complete':
+      return 'The OCR evidence is stored locally and ready for reconstruction.';
+    default:
+      return 'Recora is starting the on-device OCR workflow.';
+  }
 }
 
 function messageFromError(error: unknown, fallback: string): string {
@@ -1418,6 +1484,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     marginTop: 14,
+  },
+  progressMeta: {
+    color: '#7B817C',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 10,
+    textAlign: 'center',
   },
   errorMark: {
     color: '#C94A4A',

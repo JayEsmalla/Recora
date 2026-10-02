@@ -30,6 +30,7 @@ describe('receipt date parsing', () => {
       raw: '10/03/2026',
       isoDateTime: null,
       ambiguous: true,
+      alternativeIsoDateTimes: ['2026-10-03', '2026-03-10'],
     });
   });
 

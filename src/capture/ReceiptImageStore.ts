@@ -1,5 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { selectOrphanedReceiptImageUris } from './imageCleanup';
 import type { PreparedReceiptImage, ReceiptImageSource } from './types';
 
 const ROOT_DIRECTORY = 'recora';
@@ -55,10 +56,18 @@ export async function retainPreparedReceiptImage(
   };
 }
 
-export function removePrivateReceiptImage(uri: string): void {
-  const file = new File(uri);
-  if (file.exists) {
-    file.delete();
+export function removePrivateReceiptImage(uri: string): boolean {
+  try {
+    const file = new File(uri);
+    if (file.exists) {
+      file.delete();
+    }
+    return true;
+  } catch {
+    // SQLite is the source of truth. A failed best-effort file cleanup must not
+    // roll back or misreport an already committed receipt state. Startup orphan
+    // pruning will retry files that are no longer referenced by the database.
+    return false;
   }
 }
 
@@ -67,6 +76,31 @@ export function clearStagedReceiptImages(): void {
   for (const entry of staging.list()) {
     entry.delete();
   }
+}
+
+export function pruneOrphanedReceiptImages(
+  referencedUris: readonly string[],
+): string[] {
+  const { receipts } = ensureDirectories();
+  const entries = receipts.list();
+  const orphaned = new Set(
+    selectOrphanedReceiptImageUris(
+      entries.map((entry) => entry.uri),
+      referencedUris,
+    ),
+  );
+  const removed: string[] = [];
+
+  for (const entry of entries) {
+    if (!orphaned.has(entry.uri)) {
+      continue;
+    }
+
+    removed.push(entry.uri);
+    entry.delete();
+  }
+
+  return removed;
 }
 
 function createLocalId(prefix: string): string {

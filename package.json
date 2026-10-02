@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "qa": "vitest run OfflineEndToEnd.test.ts corpusMetrics.test.ts validationCorpus.test.ts ImageQualityGate.test.ts imageGeometry.test.ts imageCleanup.test.ts",
     "check": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {

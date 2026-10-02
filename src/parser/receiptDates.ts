@@ -123,6 +123,16 @@ export function parseDateText(
             numeric[6],
           ),
       ambiguous,
+      alternativeIsoDateTimes: ambiguous
+        ? numericDateAlternatives(
+            year,
+            first,
+            second,
+            numeric[4],
+            numeric[5],
+            numeric[6],
+          )
+        : undefined,
     };
   }
 
@@ -155,6 +165,34 @@ export function parseDateText(
   }
 
   return null;
+}
+
+function numericDateAlternatives(
+  year: number,
+  first: number,
+  second: number,
+  hour?: string,
+  minute?: string,
+  secondValue?: string,
+): string[] {
+  const candidates: string[] = [];
+
+  if (isPlausibleDate(year, first, second)) {
+    candidates.push(
+      toIsoLocal(year, first, second, hour, minute, secondValue),
+    );
+  }
+
+  if (
+    first !== second &&
+    isPlausibleDate(year, second, first)
+  ) {
+    candidates.push(
+      toIsoLocal(year, second, first, hour, minute, secondValue),
+    );
+  }
+
+  return [...new Set(candidates)];
 }
 
 function normalizeYear(year: number): number {

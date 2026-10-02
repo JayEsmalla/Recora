@@ -90,6 +90,22 @@ describe('ReceiptRepository', () => {
     expect(receipt?.merchantRawName).toBe('Corrected Store');
   });
 
+  it('lists retained image references for startup orphan cleanup', async () => {
+    await repository.createDraft({
+      id: 'with-image',
+      imageUri: 'file:///private/with-image.jpg',
+      now,
+    });
+    await repository.createDraft({
+      id: 'without-image',
+      now,
+    });
+
+    expect(await repository.listImageUris()).toEqual([
+      'file:///private/with-image.jpg',
+    ]);
+  });
+
   it('lists unaccepted drafts separately from accepted history', async () => {
     await repository.createDraft({ id: 'pending', now });
     await repository.createDraft({ id: 'accepted', now });

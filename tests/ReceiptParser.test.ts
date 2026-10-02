@@ -118,6 +118,10 @@ describe('parseReceipt', () => {
 
     expect(candidate.date?.ambiguous).toBe(true);
     expect(candidate.date?.isoDateTime).toBeNull();
+    expect(candidate.date?.alternativeIsoDateTimes).toEqual([
+      '2026-10-03',
+      '2026-03-10',
+    ]);
     expect(candidate.warnings).toContainEqual(
       expect.objectContaining({ code: 'ambiguous-date' }),
     );
@@ -160,7 +164,7 @@ describe('parseReceipt', () => {
     );
   });
 
-  it('surfaces multiple total candidates for review and uses the lowest one', () => {
+  it('surfaces multiple total candidates, preserves alternatives, and uses the bottom-most one', () => {
     const candidate = parseReceipt(
       makeDocument([
         'STORE',
@@ -173,6 +177,10 @@ describe('parseReceipt', () => {
 
     expect(candidate.summary.totalMinor).toBe(8000);
     expect(candidate.summary.totalSourceIds).toEqual(['line-4']);
+    expect(candidate.summary.totalAlternatives).toEqual([
+      { amountMinor: 8500, observationIds: ['line-3'] },
+      { amountMinor: 8000, observationIds: ['line-4'] },
+    ]);
     expect(candidate.warnings).toContainEqual(
       expect.objectContaining({ code: 'multiple-total-candidates' }),
     );

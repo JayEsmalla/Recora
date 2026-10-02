@@ -10,8 +10,8 @@
 - Phase 5 — validation and confidence: implementation complete on the controlled validation corpus; real-receipt false-mismatch measurement remains part of Phase 8
 - Phase 6 — review and correction: implementation complete; physical-device review ergonomics remain part of release hardening
 - Phase 7 — history, search, and price history: implemented
-- Phase 8 — corpus-driven QA and hardening: next
-- Phase 9 — release-candidate polish: pending
+- Phase 8 — corpus-driven QA and hardening: implementation complete; physical real-receipt/device corpus evidence remains required
+- Phase 9 — release-candidate polish: implementation complete; final release claim remains blocked on the external device/corpus gates listed below
 
 ## Phase 2 Evidence
 
@@ -23,8 +23,9 @@ Implemented:
 - four-corner manual crop control
 - left/right rotation
 - orientation-safe image manipulation
-- conservative JPEG preparation
-- long-image resizing that protects receipt text width
+- optional perspective/deskew geometry hook at the preprocessing boundary
+- conservative JPEG preparation; automatic brightness/contrast filters are intentionally not enabled without corpus evidence that they improve thermal-text OCR
+- long-image resizing that preserves aspect ratio while enforcing a hard OCR pixel/memory budget
 - automatic structural quality checks for resolution, extreme compression, and unusual receipt aspect ratio
 - explicit user quality confirmation for sharpness, lighting, and complete framing
 - Android image-picker recovery path after activity destruction
@@ -92,6 +93,8 @@ Implemented:
 - refund/return transaction-type detection
 - possible duplicate item-row warnings
 - explicit warnings for ambiguous dates, multiple totals, summary lines without amounts, and priced lines that cannot be reconstructed safely
+- ambiguous numeric dates preserve both plausible locale interpretations instead of silently choosing one
+- multiple total/subtotal candidates preserve their amount/source alternatives while the bottom-most total is selected for review
 - parser source traceability back to persisted OCR observation IDs
 - restart-safe parsing by rebuilding parser input from persisted OCR evidence
 - merchant-specific ignored-line hooks without hard-coding merchant behavior into the baseline grammar
@@ -194,12 +197,59 @@ Validation:
 - history queries are constrained to accepted receipts
 - date-only upper bounds are normalized to include the complete selected day
 
-## Release-gate verification still required
+## Phase 8 Evidence
 
-The following items remain mandatory before Phase 9 can be declared complete:
-- physical-device camera flow
-- offline OCR execution on a native Android build with networking disabled
-- OCR result geometry against representative real receipts
-- iOS native build verification if iOS is included in the demonstrated target set
-- lower-memory long-receipt behavior
-- complete corpus metrics and end-to-end acceptance suite
+Implemented:
+- declared 10-case synthetic parser corpus covering core Version 1 layout and amount patterns
+- automated critical-field accuracy and line-item exactness calculation with roadmap thresholds enforced in tests
+- current controlled synthetic parser result: 100% critical-field accuracy and 100% line-item exactness
+- controlled validation corpus continues to enforce 100% deterministic arithmetic-mismatch detection and 0% false mismatches on its valid synthetic cases
+- network-forbidden service-level end-to-end test covering OCR -> persisted evidence -> review -> restart recovery -> acceptance -> search -> receipt reopen -> deletion
+- interruption test proving a saved review draft remains excluded from accepted purchase history
+- long-receipt memory hardening: OCR preprocessing now treats the pixel ceiling as non-negotiable, including extreme receipt aspect ratios
+- image robustness, migration, repository, parser, validation, history, and normalization suites remain part of the full regression gate
+- dedicated `npm run qa` hardening command
+- QA/release evidence document explicitly separates synthetic regression metrics from unproven real-receipt accuracy
+
+Validation boundary:
+- synthetic and service-level automated evidence is implemented and passing
+- real camera/ML Kit accuracy metrics still require an anonymized physical-receipt corpus and supported devices; Recora does not claim those results from synthetic fixtures
+
+## Phase 9 Evidence
+
+Implemented:
+- real OCR progress stages for retained-image loading, local text recognition, sensitive-data redaction, evidence persistence, and completion
+- OCR progress events include elapsed time for lightweight profiling without persisting receipt content in telemetry
+- processing UI exposes meaningful local progress instead of a single indefinite message
+- startup cleanup removes abandoned staging images and retained receipt files that have no SQLite reference
+- cleanup selection is regression-tested and cleanup failure is non-fatal
+- accepted receipt deletion requires destructive confirmation
+- Android application backup is disabled in Expo configuration to avoid intentional Android Auto Backup of receipt data
+- data/privacy/recovery documentation defines local storage, cleanup, deletion, interruption recovery, and backup boundaries
+- crop image has an accessibility label and each crop corner exposes directional accessibility actions in addition to touch dragging
+- very long image resizing is regression-tested against the 12-megapixel OCR budget
+- README and QA documentation expose reproducible project and hardening commands
+
+Release verification:
+- TypeScript validation passes after the hardening changes
+- `npm run qa` passes
+- full `npm run check` passes
+- Expo Doctor passes 20/21 checks after removing the invalid legacy splash configuration; the sole remaining warning is React Native Directory metadata marking `rn-mlkit-ocr` as untested on New Architecture
+- Android clean prebuild succeeds
+- generated Android manifest contains `android:allowBackup="false"`
+- generated Android root Gradle configuration contains `ocrModels = ["latin"]` and `ocrUseBundled = true`
+- local Android Java/Gradle compilation remains unavailable on the REL.AI Windows host because `java` / `JAVA_HOME` is not installed
+- final Android Expo/Hermes release-candidate export succeeds after the Phase 8/9 hardening changes
+
+## Final release-gate verification still required
+
+The roadmap implementation is complete, but a **final release-quality claim is intentionally blocked** until the following external evidence exists:
+- physical-device camera flow on the supported Android target set
+- bundled native ML Kit OCR execution with networking disabled before the first scan
+- OCR text and geometry checked against representative real thermal receipts
+- anonymized physical-receipt corpus metrics for critical fields, line-item exactness, and false-mismatch rate
+- lower-memory-device run with a very long receipt
+- screen-reader/device usability pass
+- iOS native build and backup-exclusion verification if iOS is included in the demonstrated target set
+
+These are evidence-gathering gates, not unimplemented core application phases.

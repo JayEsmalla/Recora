@@ -61,6 +61,38 @@ describe('OcrProcessingService', () => {
     expect((await receipts.getById('receipt-1'))?.status).toBe('draft');
   });
 
+  it('reports deterministic OCR progress stages for profiling and UI feedback', async () => {
+    const service = new OcrProcessingService(
+      new FakeOcrEngine(fixture),
+      receipts,
+      ocr,
+    );
+    const events: Array<{ stage: string; elapsedMs: number }> = [];
+
+    await service.process({
+      receiptId: 'receipt-1',
+      now,
+      onProgress(event) {
+        events.push(event);
+      },
+    });
+
+    expect(events.map((event) => event.stage)).toEqual([
+      'loading-receipt',
+      'recognizing-text',
+      'redacting-sensitive-data',
+      'persisting-evidence',
+      'complete',
+    ]);
+    expect(events.every((event) => event.elapsedMs >= 0)).toBe(true);
+    expect(
+      events.every(
+        (event, index) =>
+          index === 0 || event.elapsedMs >= events[index - 1]!.elapsedMs,
+      ),
+    ).toBe(true);
+  });
+
   it('does not persist a cancelled OCR result', async () => {
     const controller = new AbortController();
     controller.abort();

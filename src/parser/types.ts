@@ -8,6 +8,7 @@ export interface ParsedDateCandidate extends SourceTrace {
   raw: string;
   isoDateTime: string | null;
   ambiguous: boolean;
+  alternativeIsoDateTimes?: string[];
 }
 
 export interface ParsedMerchantCandidate extends SourceTrace {
@@ -40,11 +41,17 @@ export interface ParsedAdjustmentCandidate extends SourceTrace {
   amountMinor: number;
 }
 
+export interface ParsedAmountAlternative extends SourceTrace {
+  amountMinor: number;
+}
+
 export interface ReceiptSummaryCandidate {
   subtotalMinor: number | null;
   subtotalSourceIds: string[];
+  subtotalAlternatives?: ParsedAmountAlternative[];
   totalMinor: number | null;
   totalSourceIds: string[];
+  totalAlternatives?: ParsedAmountAlternative[];
   adjustments: ParsedAdjustmentCandidate[];
 }
 

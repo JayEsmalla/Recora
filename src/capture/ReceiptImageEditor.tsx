@@ -163,7 +163,12 @@ export function ReceiptImageEditor({
       </Text>
 
       <View style={styles.imageStage} onLayout={handleLayout}>
-        <Image source={{ uri: image.uri }} style={styles.image} resizeMode="contain" />
+        <Image
+          accessibilityLabel="Receipt image being cropped"
+          source={{ uri: image.uri }}
+          style={styles.image}
+          resizeMode="contain"
+        />
         {cropBox ? (
           <>
             <View
@@ -183,24 +188,36 @@ export function ReceiptImageEditor({
               y={cropBox.top}
               responder={topLeft.panHandlers}
               label="Move top left crop corner"
+              onAccessibilityMove={(direction) =>
+                setCrop(adjustCropForAccessibility(crop, 'top-left', direction))
+              }
             />
             <CropHandle
               x={cropBox.left + cropBox.width}
               y={cropBox.top}
               responder={topRight.panHandlers}
               label="Move top right crop corner"
+              onAccessibilityMove={(direction) =>
+                setCrop(adjustCropForAccessibility(crop, 'top-right', direction))
+              }
             />
             <CropHandle
               x={cropBox.left}
               y={cropBox.top + cropBox.height}
               responder={bottomLeft.panHandlers}
               label="Move bottom left crop corner"
+              onAccessibilityMove={(direction) =>
+                setCrop(adjustCropForAccessibility(crop, 'bottom-left', direction))
+              }
             />
             <CropHandle
               x={cropBox.left + cropBox.width}
               y={cropBox.top + cropBox.height}
               responder={bottomRight.panHandlers}
               label="Move bottom right crop corner"
+              onAccessibilityMove={(direction) =>
+                setCrop(adjustCropForAccessibility(crop, 'bottom-right', direction))
+              }
             />
           </>
         ) : null}
@@ -340,16 +357,43 @@ function CropHandle({
   y,
   responder,
   label,
+  onAccessibilityMove,
 }: {
   x: number;
   y: number;
   responder: ReturnType<typeof PanResponder.create>['panHandlers'];
   label: string;
+  onAccessibilityMove: (
+    direction: 'left' | 'right' | 'up' | 'down',
+  ) => void;
 }) {
   return (
     <View
       accessibilityRole="adjustable"
       accessibilityLabel={label}
+      accessibilityHint="Use the available accessibility actions to move this crop corner."
+      accessibilityActions={[
+        { name: 'move-left', label: 'Move left' },
+        { name: 'move-right', label: 'Move right' },
+        { name: 'move-up', label: 'Move up' },
+        { name: 'move-down', label: 'Move down' },
+      ]}
+      onAccessibilityAction={(event) => {
+        switch (event.nativeEvent.actionName) {
+          case 'move-left':
+            onAccessibilityMove('left');
+            break;
+          case 'move-right':
+            onAccessibilityMove('right');
+            break;
+          case 'move-up':
+            onAccessibilityMove('up');
+            break;
+          case 'move-down':
+            onAccessibilityMove('down');
+            break;
+        }
+      }}
       {...responder}
       style={[
         styles.cropHandle,
@@ -360,6 +404,20 @@ function CropHandle({
       ]}
     />
   );
+}
+
+function adjustCropForAccessibility(
+  crop: NormalizedCrop,
+  corner: CropCorner,
+  direction: 'left' | 'right' | 'up' | 'down',
+): NormalizedCrop {
+  const step = 0.02;
+  const deltaX =
+    direction === 'left' ? -step : direction === 'right' ? step : 0;
+  const deltaY =
+    direction === 'up' ? -step : direction === 'down' ? step : 0;
+
+  return adjustCropCorner(crop, corner, deltaX, deltaY);
 }
 
 function useCropPanResponder(

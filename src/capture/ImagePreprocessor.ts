@@ -13,9 +13,21 @@ import type {
   ReceiptImageSource,
 } from './types';
 
+export interface ReceiptGeometryPreparationHook {
+  id: string;
+  prepare(input: {
+    source: ReceiptImageSource;
+    crop: NormalizedCrop;
+  }): Promise<{
+    source: ReceiptImageSource;
+    crop: NormalizedCrop;
+  }>;
+}
+
 export interface PrepareReceiptImageOptions {
   crop?: NormalizedCrop;
   maxPixels?: number;
+  geometryHook?: ReceiptGeometryPreparationHook;
 }
 
 export async function rotateReceiptImage(
@@ -41,8 +53,23 @@ export async function prepareReceiptImage(
   source: ReceiptImageSource,
   options: PrepareReceiptImageOptions = {},
 ): Promise<PreparedReceiptImage> {
-  const crop = options.crop ?? FULL_IMAGE_CROP;
-  const cropPixels = normalizedCropToPixels(crop, source.width, source.height);
+  let workingSource = source;
+  let crop = options.crop ?? FULL_IMAGE_CROP;
+
+  if (options.geometryHook) {
+    const preparedGeometry = await options.geometryHook.prepare({
+      source: workingSource,
+      crop,
+    });
+    workingSource = preparedGeometry.source;
+    crop = preparedGeometry.crop;
+  }
+
+  const cropPixels = normalizedCropToPixels(
+    crop,
+    workingSource.width,
+    workingSource.height,
+  );
   const resize = computeOcrResize(
     cropPixels.width,
     cropPixels.height,
@@ -57,7 +84,7 @@ export async function prepareReceiptImage(
     actions.push({ resize });
   }
 
-  const result = await manipulateAsync(source.uri, actions, {
+  const result = await manipulateAsync(workingSource.uri, actions, {
     compress: 0.94,
     format: SaveFormat.JPEG,
   });
