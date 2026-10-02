@@ -20,7 +20,7 @@ describe('database migrations', () => {
     const row = await database.first<{ count: number }>(
       'SELECT COUNT(*) AS count FROM schema_migrations;',
     );
-    expect(row?.count).toBe(2);
+    expect(row?.count).toBe(3);
   });
 
   it('enables receipt cascade deletion', async () => {
@@ -75,6 +75,35 @@ describe('database migrations', () => {
 
     rows = await database.all('SELECT * FROM accepted_price_history;');
     expect(rows).toHaveLength(1);
+  });
+
+  it('installs history categories and the enriched accepted price-history view', async () => {
+    const categories = await database.all<{ id: string; name: string }>(
+      'SELECT id, name FROM categories ORDER BY name ASC;',
+    );
+    expect(categories.map((category) => category.name)).toEqual(
+      expect.arrayContaining([
+        'Food & Groceries',
+        'Dining',
+        'Household',
+        'Personal Care',
+        'Health',
+        'Transport',
+        'Other',
+      ]),
+    );
+
+    const columns = await database.all<{ name: string }>(
+      'PRAGMA table_info(correction_rules);',
+    );
+    expect(columns.map((column) => column.name)).toContain('normalized_item_id');
+
+    const viewSql = await database.first<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = 'accepted_price_history';",
+    );
+    expect(viewSql?.sql).toContain('receipt_id');
+    expect(viewSql?.sql).toContain('normalized_name');
+    expect(viewSql?.sql).toContain('category_name');
   });
 
   it('rejects non-integer persisted money', async () => {

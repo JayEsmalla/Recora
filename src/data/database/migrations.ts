@@ -186,6 +186,66 @@ CREATE INDEX IF NOT EXISTS idx_ocr_observations_parent
   ON ocr_observations(ocr_run_id, parent_id);
 `,
   },
+  {
+    version: 3,
+    name: 'history_search_and_normalization',
+    sql: `
+ALTER TABLE correction_rules ADD COLUMN normalized_item_id TEXT
+  REFERENCES normalized_items(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_merchants_canonical_unique
+  ON merchants(canonical_name COLLATE NOCASE);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_normalized_items_canonical_unique
+  ON normalized_items(canonical_name COLLATE NOCASE);
+
+CREATE INDEX IF NOT EXISTS idx_receipts_raw_merchant_search
+  ON receipts(merchant_raw_name COLLATE NOCASE);
+
+CREATE INDEX IF NOT EXISTS idx_line_items_category
+  ON line_items(category_id);
+
+CREATE INDEX IF NOT EXISTS idx_normalized_items_category
+  ON normalized_items(category_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_correction_rules_exact_normalized
+  ON correction_rules(merchant_id, pattern COLLATE NOCASE)
+  WHERE enabled = 1;
+
+INSERT OR IGNORE INTO categories (id, name, icon) VALUES
+  ('category-food-groceries', 'Food & Groceries', NULL),
+  ('category-dining', 'Dining', NULL),
+  ('category-household', 'Household', NULL),
+  ('category-personal-care', 'Personal Care', NULL),
+  ('category-health', 'Health', NULL),
+  ('category-transport', 'Transport', NULL),
+  ('category-other', 'Other', NULL);
+
+DROP VIEW IF EXISTS accepted_price_history;
+
+CREATE VIEW accepted_price_history AS
+SELECT
+  li.id AS line_item_id,
+  li.receipt_id,
+  li.normalized_item_id,
+  ni.canonical_name AS normalized_name,
+  li.raw_name,
+  COALESCE(li.category_id, ni.category_id) AS category_id,
+  c.name AS category_name,
+  r.merchant_id,
+  r.merchant_raw_name,
+  r.purchased_at,
+  li.unit_price_minor,
+  li.line_total_minor,
+  li.quantity_milli,
+  r.currency_code
+FROM line_items li
+JOIN receipts r ON r.id = li.receipt_id
+LEFT JOIN normalized_items ni ON ni.id = li.normalized_item_id
+LEFT JOIN categories c ON c.id = COALESCE(li.category_id, ni.category_id)
+WHERE r.status = 'accepted';
+`,
+  },
 ];
 
 export async function migrateDatabase(database: DatabaseConnection): Promise<void> {
