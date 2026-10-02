@@ -9,8 +9,8 @@
 - Phase 4 — receipt reconstruction parser: implementation complete; broader real-receipt corpus measurement remains part of Phase 8
 - Phase 5 — validation and confidence: implementation complete on the controlled validation corpus; real-receipt false-mismatch measurement remains part of Phase 8
 - Phase 6 — review and correction: implementation complete; physical-device review ergonomics remain part of release hardening
-- Phase 7 — history, search, and price history: next
-- Phase 8 — corpus-driven QA and hardening: pending
+- Phase 7 — history, search, and price history: implemented
+- Phase 8 — corpus-driven QA and hardening: next
 - Phase 9 — release-candidate polish: pending
 
 ## Phase 2 Evidence
@@ -167,6 +167,32 @@ Validation:
 - full `npm run check` passes
 - Android Expo/Hermes export bundles successfully
 - physical-device form ergonomics, keyboard behavior, image evidence readability, and interruption behavior remain part of Phase 8/9 device QA
+
+## Phase 7 Evidence
+
+Implemented:
+- chronological accepted-receipt history; unfinished drafts are excluded by query contract
+- receipt detail with original item descriptions, reviewed totals, adjustments, validation state, retained image, and raw OCR evidence
+- local item search over raw receipt names and user-assigned normalized identities
+- merchant search, category filter, and inclusive date-range filtering
+- built-in Version 1 categories stored in SQLite
+- normalized item identities stored separately from raw receipt descriptions
+- explicit item identity assignment, reassignment, and unlinking
+- item purchase history and unit-price history derived only from accepted reviewed receipts
+- raw-description history remains available before normalization
+- deletion of an accepted receipt removes its contribution from receipt search and item/price history through relational cascade behavior
+- receipt deletion requires destructive confirmation and removes the retained private image after database deletion
+- conservative merchant-specific learning rules are opt-in and exact-match only
+- learned rules are applied only after a receipt is accepted; they never alter raw receipt descriptions
+- learned merchant rules can be reset independently of saved receipt evidence and normalized identities
+- migration adds search/normalization indexes, correction-rule normalized-item linkage, categories, and an enriched accepted-price-history view
+- home screen exposes purchase history as a first-class local workflow
+
+Validation:
+- focused migration, history, search, normalization, rule-learning, unlinking, deletion, and price-history tests pass
+- full `npm run check` passes
+- history queries are constrained to accepted receipts
+- date-only upper bounds are normalized to include the complete selected day
 
 ## Release-gate verification still required
 

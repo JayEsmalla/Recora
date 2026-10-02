@@ -68,7 +68,7 @@ export class HistoryRepository {
 
     if (filters.toDate?.trim()) {
       clauses.push('COALESCE(r.purchased_at, r.created_at) <= ?');
-      params.push(filters.toDate.trim());
+      params.push(normalizeRangeEnd(filters.toDate.trim()));
     }
 
     if (filters.categoryId) {
@@ -250,7 +250,7 @@ export class HistoryRepository {
 
     if (filters.toDate?.trim()) {
       clauses.push('COALESCE(r.purchased_at, r.created_at) <= ?');
-      params.push(filters.toDate.trim());
+      params.push(normalizeRangeEnd(filters.toDate.trim()));
     }
 
     const rows = await this.database.all<ItemSearchRow>(
@@ -898,6 +898,12 @@ function mapCorrectionRule(row: CorrectionRuleRow): CorrectionRuleRecord {
     normalizedItemId: row.normalized_item_id,
     enabled: row.enabled === 1,
   };
+}
+
+function normalizeRangeEnd(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value + 'T23:59:59.999'
+    : value;
 }
 
 function boundedLimit(value: number | undefined, max: number): number {

@@ -32,6 +32,21 @@ import {
 } from './src/data/repositories/OcrRepository';
 import { ReceiptRepository } from './src/data/repositories/ReceiptRepository';
 import type { Receipt } from './src/domain/receipt';
+import { HistoryRepository } from './src/history/HistoryRepository';
+import { HistoryScreen } from './src/history/HistoryScreen';
+import { HistoryService, type HistoryOverview } from './src/history/HistoryService';
+import { ItemHistoryScreen } from './src/history/ItemHistoryScreen';
+import { NormalizationService } from './src/history/NormalizationService';
+import { ReceiptDetailScreen } from './src/history/ReceiptDetailScreen';
+import type {
+  CategoryOption,
+  HistoryFilters,
+  HistoryLineItem,
+  ItemHistorySummary,
+  ItemSearchEntry,
+  NormalizedItemOption,
+  ReceiptHistoryDetail,
+} from './src/history/types';
 import { MlKitOcrEngine } from './src/ocr/MlKitOcrEngine';
 import { OcrProcessingService } from './src/ocr/OcrProcessingService';
 import { ParserProcessingService } from './src/parser/ParserProcessingService';
@@ -51,7 +66,14 @@ type AppScreen =
   | 'review-loading'
   | 'review'
   | 'review-error'
-  | 'saved';
+  | 'saved'
+  | 'history-loading'
+  | 'history'
+  | 'history-error'
+  | 'receipt-detail-loading'
+  | 'receipt-detail'
+  | 'item-history-loading'
+  | 'item-history';
 
 export default function App() {
   const [bootState, setBootState] = useState<BootState>('loading');
@@ -64,6 +86,12 @@ export default function App() {
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
   const [pendingReceipts, setPendingReceipts] = useState<Receipt[]>([]);
+  const [historyOverview, setHistoryOverview] = useState<HistoryOverview | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [receiptDetail, setReceiptDetail] = useState<ReceiptHistoryDetail | null>(null);
+  const [itemHistory, setItemHistory] = useState<ItemHistorySummary | null>(null);
+  const [historyCategories, setHistoryCategories] = useState<CategoryOption[]>([]);
+  const [normalizedItems, setNormalizedItems] = useState<NormalizedItemOption[]>([]);
   const recoveryAttempted = useRef(false);
   const ocrAbortController = useRef<AbortController | null>(null);
 
@@ -253,6 +281,172 @@ export default function App() {
     );
   }
 
+  async function createHistoryService(): Promise<HistoryService> {
+    const database = await openRecoraDatabase();
+    const repository = new HistoryRepository(database);
+    return new HistoryService(
+      repository,
+      new NormalizationService(repository),
+    );
+  }
+
+  async function openHistory(): Promise<void> {
+    setHistoryError(null);
+    setScreen('history-loading');
+
+    try {
+      const service = await createHistoryService();
+      const [overview, identities] = await Promise.all([
+        service.loadOverview(),
+        service.listNormalizedItems(),
+      ]);
+      setHistoryOverview(overview);
+      setHistoryCategories(overview.categories);
+      setNormalizedItems(identities);
+      setScreen('history');
+    } catch (error) {
+      setHistoryError(
+        messageFromError(error, 'Recora could not load local purchase history.'),
+      );
+      setScreen('history-error');
+    }
+  }
+
+  async function searchHistory(
+    filters: HistoryFilters,
+  ): Promise<HistoryOverview> {
+    const service = await createHistoryService();
+    const overview = await service.loadOverview(filters);
+    setHistoryOverview(overview);
+    setHistoryCategories(overview.categories);
+    return overview;
+  }
+
+  async function openReceiptDetail(receiptId: string): Promise<void> {
+    setHistoryError(null);
+    setScreen('receipt-detail-loading');
+
+    try {
+      const service = await createHistoryService();
+      const [detail, identities] = await Promise.all([
+        service.getReceiptDetail(receiptId),
+        service.listNormalizedItems(),
+      ]);
+
+      if (!detail) {
+        throw new Error('Accepted receipt could not be found.');
+      }
+
+      setReceiptDetail(detail);
+      setNormalizedItems(identities);
+      setScreen('receipt-detail');
+    } catch (error) {
+      setHistoryError(
+        messageFromError(error, 'Recora could not open this saved receipt.'),
+      );
+      setScreen('history-error');
+    }
+  }
+
+  async function openItemHistory(
+    item: ItemSearchEntry | HistoryLineItem,
+  ): Promise<void> {
+    setHistoryError(null);
+    setScreen('item-history-loading');
+
+    try {
+      const service = await createHistoryService();
+      const summary = await service.getItemHistory(
+        item.normalizedItemId
+          ? { normalizedItemId: item.normalizedItemId }
+          : { rawName: item.rawName },
+      );
+
+      if (!summary) {
+        throw new Error('No accepted purchase history was found for this item.');
+      }
+
+      setItemHistory(summary);
+      setScreen('item-history');
+    } catch (error) {
+      setHistoryError(
+        messageFromError(error, 'Recora could not load this item history.'),
+      );
+      setScreen('history-error');
+    }
+  }
+
+  async function assignHistoryItemIdentity(input: {
+    lineItemId: string;
+    canonicalName: string;
+    categoryId: string | null;
+    rememberForMerchant: boolean;
+  }): Promise<ReceiptHistoryDetail> {
+    if (!receiptDetail) {
+      throw new Error('No saved receipt is open.');
+    }
+
+    const service = await createHistoryService();
+    await service.assignItemIdentity(input);
+
+    const [detail, identities] = await Promise.all([
+      service.getReceiptDetail(receiptDetail.receiptId),
+      service.listNormalizedItems(),
+    ]);
+
+    if (!detail) {
+      throw new Error('Saved receipt could not be reloaded after organizing the item.');
+    }
+
+    setReceiptDetail(detail);
+    setNormalizedItems(identities);
+    return detail;
+  }
+
+  async function unlinkHistoryItemIdentity(
+    lineItemId: string,
+  ): Promise<ReceiptHistoryDetail> {
+    if (!receiptDetail) {
+      throw new Error('No saved receipt is open.');
+    }
+
+    const service = await createHistoryService();
+    await service.unlinkItemIdentity(lineItemId);
+    const detail = await service.getReceiptDetail(receiptDetail.receiptId);
+
+    if (!detail) {
+      throw new Error('Saved receipt could not be reloaded after unlinking the item.');
+    }
+
+    setReceiptDetail(detail);
+    return detail;
+  }
+
+  async function resetHistoryRules(): Promise<number> {
+    if (!receiptDetail) {
+      throw new Error('No saved receipt is open.');
+    }
+
+    const service = await createHistoryService();
+    return service.resetRulesForReceipt(receiptDetail.receiptId);
+  }
+
+  async function deleteHistoryReceipt(): Promise<void> {
+    if (!receiptDetail) {
+      throw new Error('No saved receipt is open.');
+    }
+
+    const service = await createHistoryService();
+    const imageUri = await service.deleteReceipt(receiptDetail.receiptId);
+    if (imageUri) {
+      removePrivateReceiptImage(imageUri);
+    }
+
+    setReceiptDetail(null);
+    setItemHistory(null);
+    await openHistory();
+  }
+
   async function openReview(receiptId: string): Promise<void> {
     setPreparedReceiptId(receiptId);
     setMessage(null);
@@ -301,6 +495,14 @@ export default function App() {
 
     const service = await createReviewService();
     await service.saveAccepted(receiptId, draft, acknowledgeReview);
+
+    try {
+      const history = await createHistoryService();
+      await history.applyKnownRules(receiptId);
+    } catch (error) {
+      console.warn('Accepted receipt was saved, but local normalization rules could not be applied.', error);
+    }
+
     setReviewSession(null);
     setPreparedReceiptId(null);
     setOcrRun(null);
@@ -442,6 +644,102 @@ export default function App() {
             <Text style={styles.primaryButtonText}>Back to home</Text>
           </Pressable>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (
+    screen === 'history-loading' ||
+    screen === 'receipt-detail-loading' ||
+    screen === 'item-history-loading'
+  ) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.bootTitle}>Loading local purchase history</Text>
+          <Text style={styles.centeredBody}>
+            Recora is reading reviewed receipts from the on-device database.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'history-error') {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <Text style={styles.errorMark}>!</Text>
+          <Text style={styles.bootTitle}>Purchase history could not open</Text>
+          <Text style={styles.centeredBody}>
+            {historyError ??
+              'Your accepted receipts remain stored locally. Retry the history view.'}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={openHistory}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Retry history</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScreen('home')}
+            style={styles.secondaryWideButton}
+          >
+            <Text style={styles.secondaryWideButtonText}>Back to home</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'history' && historyOverview) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <HistoryScreen
+          initialOverview={historyOverview}
+          onSearch={searchHistory}
+          onOpenReceipt={openReceiptDetail}
+          onOpenItem={openItemHistory}
+          onBack={() => setScreen('home')}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'receipt-detail' && receiptDetail) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <ReceiptDetailScreen
+          initialDetail={receiptDetail}
+          categories={historyCategories}
+          normalizedItems={normalizedItems}
+          onAssignIdentity={assignHistoryItemIdentity}
+          onUnlinkIdentity={unlinkHistoryItemIdentity}
+          onResetRules={resetHistoryRules}
+          onDelete={deleteHistoryReceipt}
+          onOpenItemHistory={openItemHistory}
+          onBack={openHistory}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'item-history' && itemHistory) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <ItemHistoryScreen
+          summary={itemHistory}
+          onOpenReceipt={openReceiptDetail}
+          onBack={openHistory}
+        />
       </SafeAreaView>
     );
   }
@@ -690,6 +988,24 @@ export default function App() {
           <Text style={styles.chevron}>›</Text>
         </Pressable>
 
+        <Pressable
+          accessibilityRole="button"
+          onPress={openHistory}
+          style={styles.historyCard}
+        >
+          <View style={styles.historyCardIcon}>
+            <Text style={styles.historyCardIconText}>≡</Text>
+          </View>
+          <View style={styles.scanCopy}>
+            <Text style={styles.scanTitle}>Purchase history</Text>
+            <Text style={styles.scanSubtitle}>
+              Search reviewed receipts and items, compare prior prices, and organize
+              equivalent products without changing receipt evidence.
+            </Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
+
         {pendingReceipts[0] ? (
           <View style={styles.foundationCard}>
             <Text style={styles.sectionLabel}>UNFINISHED RECEIPT</Text>
@@ -880,6 +1196,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+  },
+  historyCard: {
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E1DC',
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  historyCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#F0ECE2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyCardIconText: {
+    color: '#6B5B3F',
+    fontSize: 26,
+    fontWeight: '700',
   },
   scanIcon: {
     width: 48,

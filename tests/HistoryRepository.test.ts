@@ -45,7 +45,7 @@ describe('HistoryRepository', () => {
     await createAcceptedReceipt({
       id: 'receipt-new',
       merchant: 'Beta Store',
-      purchasedAt: '2026-10-01',
+      purchasedAt: '2026-10-01T18:30:00',
       totalMinor: 9000,
       items: [
         {
@@ -114,7 +114,7 @@ describe('HistoryRepository', () => {
   it('filters accepted receipts and items by date range', async () => {
     const receiptsInOctober = await history.listReceipts({
       fromDate: '2026-10-01',
-      toDate: '2026-10-31T23:59:59',
+      toDate: '2026-10-01',
     });
     expect(receiptsInOctober.map((entry) => entry.receiptId)).toEqual([
       'receipt-new',
