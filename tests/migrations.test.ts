@@ -20,7 +20,7 @@ describe('database migrations', () => {
     const row = await database.first<{ count: number }>(
       'SELECT COUNT(*) AS count FROM schema_migrations;',
     );
-    expect(row?.count).toBe(1);
+    expect(row?.count).toBe(2);
   });
 
   it('enables receipt cascade deletion', async () => {

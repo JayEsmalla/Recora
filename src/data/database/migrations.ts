@@ -143,6 +143,49 @@ JOIN receipts r ON r.id = li.receipt_id
 WHERE r.status = 'accepted';
 `,
   },
+  {
+    version: 2,
+    name: 'persist_spatial_ocr_evidence',
+    sql: `
+ALTER TABLE receipts ADD COLUMN image_width INTEGER
+  CHECK(image_width IS NULL OR image_width > 0);
+ALTER TABLE receipts ADD COLUMN image_height INTEGER
+  CHECK(image_height IS NULL OR image_height > 0);
+
+CREATE TABLE IF NOT EXISTS ocr_runs (
+  id TEXT PRIMARY KEY NOT NULL,
+  receipt_id TEXT NOT NULL UNIQUE REFERENCES receipts(id) ON DELETE CASCADE,
+  engine TEXT NOT NULL,
+  image_width INTEGER NOT NULL CHECK(image_width > 0),
+  image_height INTEGER NOT NULL CHECK(image_height > 0),
+  raw_text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ocr_observations (
+  id TEXT PRIMARY KEY NOT NULL,
+  ocr_run_id TEXT NOT NULL REFERENCES ocr_runs(id) ON DELETE CASCADE,
+  parent_id TEXT,
+  kind TEXT NOT NULL CHECK(kind IN ('block', 'line', 'element')),
+  position INTEGER NOT NULL CHECK(position >= 0),
+  text TEXT NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  width REAL NOT NULL CHECK(width >= 0),
+  height REAL NOT NULL CHECK(height >= 0),
+  confidence REAL
+    CHECK(confidence IS NULL OR confidence BETWEEN 0 AND 1),
+  UNIQUE(ocr_run_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ocr_runs_receipt
+  ON ocr_runs(receipt_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_observations_run_kind_position
+  ON ocr_observations(ocr_run_id, kind, position);
+CREATE INDEX IF NOT EXISTS idx_ocr_observations_parent
+  ON ocr_observations(ocr_run_id, parent_id);
+`,
+  },
 ];
 
 export async function migrateDatabase(database: DatabaseConnection): Promise<void> {

@@ -12,7 +12,8 @@
       "backgroundColor": "#F7F6F2"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ywach.recora"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +22,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": true
+      "predictiveBackGestureEnabled": true,
+      "package": "com.ywach.recora"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,6 +36,23 @@
           "photosPermission": "Allow Recora to choose a receipt image from your photo library.",
           "cameraPermission": "Allow Recora to photograph printed receipts.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "rn-mlkit-ocr",
+        {
+          "ocrModels": [
+            "latin"
+          ],
+          "ocrUseBundled": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
         }
       ]
     ]

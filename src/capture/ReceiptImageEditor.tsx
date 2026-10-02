@@ -239,8 +239,8 @@ export function ReceiptImageEditor({
       <View style={styles.checkCard}>
         <Text style={styles.sectionTitle}>Photo check</Text>
         <Text style={styles.sectionHint}>
-          Confirm what the app cannot safely infer from pixels alone yet. Recora will
-          add OCR-based quality signals in the next processing phase.
+          Confirm what the app cannot safely infer from pixels alone. These checks
+          keep visibly unreadable images from being treated as reliable input.
         </Text>
         <QualityCheck
           checked={checks.sharpText}

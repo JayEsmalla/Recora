@@ -26,10 +26,23 @@ import type {
   ReceiptImageSource,
 } from './src/capture/types';
 import { openRecoraDatabase } from './src/data/database/openDatabase';
+import {
+  OcrRepository,
+  type StoredOcrRun,
+} from './src/data/repositories/OcrRepository';
 import { ReceiptRepository } from './src/data/repositories/ReceiptRepository';
+import { MlKitOcrEngine } from './src/ocr/MlKitOcrEngine';
+import { OcrProcessingService } from './src/ocr/OcrProcessingService';
 
 type BootState = 'loading' | 'ready' | 'error';
-type AppScreen = 'home' | 'capture-guide' | 'editing' | 'prepared';
+type AppScreen =
+  | 'home'
+  | 'capture-guide'
+  | 'editing'
+  | 'prepared'
+  | 'ocr-processing'
+  | 'ocr-result'
+  | 'ocr-error';
 
 export default function App() {
   const [bootState, setBootState] = useState<BootState>('loading');
@@ -38,7 +51,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [preparedReceiptId, setPreparedReceiptId] = useState<string | null>(null);
+  const [ocrRun, setOcrRun] = useState<StoredOcrRun | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const recoveryAttempted = useRef(false);
+  const ocrAbortController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -126,6 +142,8 @@ export default function App() {
       await repository.createDraft({
         id: receiptId,
         imageUri: retained.uri,
+        imageWidth: retained.width,
+        imageHeight: retained.height,
         now,
       });
 
@@ -135,6 +153,9 @@ export default function App() {
 
       setSource(null);
       setPreparedReceiptId(receiptId);
+      setOcrRun(null);
+      setOcrError(null);
+      setMessage(null);
       setScreen('prepared');
     } catch (error) {
       if (retained) {
@@ -142,6 +163,58 @@ export default function App() {
       }
       throw error;
     }
+  }
+
+  async function runOfflineOcr(receiptId: string): Promise<void> {
+    const controller = new AbortController();
+    ocrAbortController.current = controller;
+    setOcrError(null);
+    setMessage(null);
+    setScreen('ocr-processing');
+
+    try {
+      const database = await openRecoraDatabase();
+      const service = new OcrProcessingService(
+        new MlKitOcrEngine(),
+        new ReceiptRepository(database),
+        new OcrRepository(database),
+      );
+
+      const run = await service.process({
+        receiptId,
+        signal: controller.signal,
+      });
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      setOcrRun(run);
+      setScreen('ocr-result');
+    } catch (error) {
+      if (controller.signal.aborted || isAbortError(error)) {
+        setMessage('Offline text recognition was cancelled. The receipt draft is still safe.');
+        setScreen('prepared');
+        return;
+      }
+
+      setOcrError(
+        messageFromError(
+          error,
+          'Offline text recognition failed. The receipt draft was not changed.',
+        ),
+      );
+      setScreen('ocr-error');
+    } finally {
+      if (ocrAbortController.current === controller) {
+        ocrAbortController.current = null;
+      }
+    }
+  }
+
+  function cancelOfflineOcr() {
+    ocrAbortController.current?.abort();
+    setMessage('Cancelling text recognition…');
   }
 
   if (bootState !== 'ready') {
@@ -223,6 +296,105 @@ export default function App() {
     );
   }
 
+  if (screen === 'ocr-processing') {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.bootTitle}>Reading receipt on this device</Text>
+          <Text style={styles.centeredBody}>
+            Recora is running the bundled Latin OCR model locally. No network
+            connection or remote OCR service is required.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={cancelOfflineOcr}
+            style={styles.secondaryWideButton}
+          >
+            <Text style={styles.secondaryWideButtonText}>Cancel recognition</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'ocr-error') {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <View style={styles.centeredPage}>
+          <Text style={styles.errorMark}>!</Text>
+          <Text style={styles.bootTitle}>Text recognition did not finish</Text>
+          <Text style={styles.centeredBody}>
+            {ocrError ??
+              'The receipt draft is still stored safely. You can retry without recapturing it.'}
+          </Text>
+          {preparedReceiptId ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => runOfflineOcr(preparedReceiptId)}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Retry offline OCR</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScreen('prepared')}
+            style={styles.secondaryWideButton}
+          >
+            <Text style={styles.secondaryWideButtonText}>Return to receipt draft</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'ocr-result' && ocrRun) {
+    const lineCount = ocrRun.observations.filter(
+      (observation) => observation.kind === 'line',
+    ).length;
+
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar style="dark" />
+        <ScrollView contentContainerStyle={styles.page}>
+          <View style={styles.successMark}>
+            <Text style={styles.successMarkText}>✓</Text>
+          </View>
+          <Text style={styles.eyebrow}>OFFLINE OCR COMPLETE</Text>
+          <Text style={styles.pageTitle}>Receipt text captured with geometry.</Text>
+          <Text style={styles.bodyText}>
+            Recora preserved the raw recognized text and {lineCount} spatial text
+            {lineCount === 1 ? ' line' : ' lines'} for reconstruction. This OCR
+            engine does not expose confidence values, so Recora leaves OCR confidence
+            unknown instead of inventing a score.
+          </Text>
+
+          <View style={styles.ocrTextCard}>
+            <Text style={styles.sectionLabel}>RAW OCR EVIDENCE</Text>
+            <Text selectable style={styles.ocrText}>
+              {ocrRun.rawText.trim() || 'No text was recognized.'}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setPreparedReceiptId(null);
+              setOcrRun(null);
+              setScreen('home');
+            }}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Back to home</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (screen === 'prepared') {
     return (
       <SafeAreaView style={styles.screen}>
@@ -234,20 +406,32 @@ export default function App() {
           <Text style={styles.pageTitle}>Receipt image is ready.</Text>
           <Text style={styles.centeredBody}>
             The prepared image is stored privately on this device and linked to a
-            local draft. Offline text recognition is the next processing stage.
+            local draft. The bundled Latin OCR model can now read it without an
+            internet connection.
           </Text>
+          {message ? <InlineError message={message} /> : null}
           {preparedReceiptId ? (
-            <Text style={styles.referenceText}>Draft {preparedReceiptId}</Text>
+            <>
+              <Text style={styles.referenceText}>Draft {preparedReceiptId}</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => runOfflineOcr(preparedReceiptId)}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>Recognize text offline</Text>
+              </Pressable>
+            </>
           ) : null}
           <Pressable
             accessibilityRole="button"
             onPress={() => {
               setPreparedReceiptId(null);
+              setMessage(null);
               setScreen('home');
             }}
-            style={styles.primaryButton}
+            style={styles.secondaryWideButton}
           >
-            <Text style={styles.primaryButtonText}>Back to home</Text>
+            <Text style={styles.secondaryWideButtonText}>Back to home</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -362,6 +546,10 @@ function createReceiptId(): string {
 
 function messageFromError(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 const styles = StyleSheet.create({
@@ -610,6 +798,21 @@ const styles = StyleSheet.create({
     color: '#6F756F',
     fontSize: 11,
     marginTop: 16,
+  },
+  ocrTextCard: {
+    marginTop: 22,
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E1DC',
+    backgroundColor: '#FFFFFF',
+  },
+  ocrText: {
+    color: '#1F2321',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 10,
+    fontFamily: 'monospace',
   },
   bootTitle: {
     color: '#1F2321',

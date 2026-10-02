@@ -14,6 +14,8 @@ export interface CreateReceiptDraftInput {
   currencyCode?: string;
   transactionType?: TransactionType;
   imageUri?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   rawOcrText?: string | null;
   now: string;
 }
@@ -64,8 +66,9 @@ export class ReceiptRepository {
     await this.database.run(
       `INSERT INTO receipts (
         id, merchant_raw_name, purchased_at, currency_code, transaction_type,
-        status, validation_state, image_uri, raw_ocr_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'draft', 'review', ?, ?, ?, ?);`,
+        status, validation_state, image_uri, image_width, image_height,
+        raw_ocr_text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'draft', 'review', ?, ?, ?, ?, ?, ?);`,
       [
         input.id,
         input.merchantRawName ?? null,
@@ -73,6 +76,8 @@ export class ReceiptRepository {
         input.currencyCode ?? 'PHP',
         input.transactionType ?? 'purchase',
         input.imageUri ?? null,
+        input.imageWidth ?? null,
+        input.imageHeight ?? null,
         input.rawOcrText ?? null,
         input.now,
         input.now,
@@ -237,6 +242,8 @@ interface ReceiptRow {
   status: ReceiptStatus;
   validation_state: ValidationState;
   image_uri: string | null;
+  image_width: number | null;
+  image_height: number | null;
   raw_ocr_text: string | null;
   created_at: string;
   updated_at: string;
@@ -255,6 +262,8 @@ function mapReceipt(row: ReceiptRow): Receipt {
     status: row.status,
     validationState: row.validation_state,
     imageUri: row.image_uri,
+    imageWidth: row.image_width,
+    imageHeight: row.image_height,
     rawOcrText: row.raw_ocr_text,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

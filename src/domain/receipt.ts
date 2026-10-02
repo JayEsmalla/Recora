@@ -22,6 +22,8 @@ export interface Receipt {
   status: ReceiptStatus;
   validationState: ValidationState;
   imageUri: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
   rawOcrText: string | null;
   createdAt: string;
   updatedAt: string;
