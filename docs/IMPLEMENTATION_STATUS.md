@@ -6,8 +6,8 @@
 - Phase 1 — SQLite foundation and data integrity: implemented
 - Phase 2 — capture and image preparation: implementation complete; physical-device camera QA remains part of release hardening
 - Phase 3 — offline OCR: implementation complete; native-device offline runtime proof remains required before the release gate
-- Phase 4 — receipt reconstruction parser: next
-- Phase 5 — validation and confidence: pending
+- Phase 4 — receipt reconstruction parser: implementation complete; broader real-receipt corpus measurement remains part of Phase 8
+- Phase 5 — validation and confidence: next
 - Phase 6 — review and correction: pending
 - Phase 7 — history, search, and price history: pending
 - Phase 8 — corpus-driven QA and hardening: pending
@@ -75,6 +75,43 @@ Validation:
 - ESLint passes
 - automated migration/repository/OCR service tests pass
 - Android JavaScript/Hermes export bundles successfully
+
+## Phase 4 Evidence
+
+Implemented:
+- deterministic receipt-line ordering from OCR geometry
+- merchant candidate detection with merchant-profile extension points
+- numeric and named date parsing without silently resolving locale-ambiguous dates
+- integer-minor-unit amount extraction including peso/PHP prefixes, grouped amounts, parenthesized negatives, and trailing-minus values
+- subtotal and final-total extraction with multiple-total warnings
+- discount, tax/VAT, service-charge, and rounding adjustment reconstruction
+- quantity/unit-price forms including `2 @ 40.00` and `2 x 40.00`
+- multiline item-description reconstruction
+- numeric product descriptors such as `1.5L` preserved when they are not price columns
+- missing-subtotal support
+- refund/return transaction-type detection
+- possible duplicate item-row warnings
+- explicit warnings for ambiguous dates, multiple totals, summary lines without amounts, and priced lines that cannot be reconstructed safely
+- parser source traceability back to persisted OCR observation IDs
+- restart-safe parsing by rebuilding parser input from persisted OCR evidence
+- merchant-specific ignored-line hooks without hard-coding merchant behavior into the baseline grammar
+
+Regression fixtures currently cover:
+- common grocery receipt with quantity syntax and multiple adjustments
+- numeric product descriptors
+- multiline descriptions
+- missing subtotal
+- ambiguous date handling
+- refund receipt
+- duplicate-looking item rows
+- total-item-count vs monetary-total disambiguation
+- multiple final-total candidates
+- merchant-profile ignored lines
+
+Validation:
+- focused parser/date/amount tests pass
+- full `npm run check` passes
+- real-receipt accuracy metrics are deliberately not claimed yet; those remain Phase 8 corpus work
 
 ## Release-gate verification still required
 
