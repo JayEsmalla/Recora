@@ -57,6 +57,7 @@ export function ReceiptDetailScreen({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [rememberForMerchant, setRememberForMerchant] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [showLocalCorrections, setShowLocalCorrections] = useState(false);
   const [busy, setBusy] = useState<
     'normalize' | 'unlink' | 'rules' | 'delete' | null
   >(null);
@@ -453,6 +454,7 @@ export function ReceiptDetailScreen({
       <View style={styles.section}>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ expanded: showEvidence }}
           onPress={() => setShowEvidence((current) => !current)}
           style={styles.evidenceHeader}
         >
@@ -488,20 +490,37 @@ export function ReceiptDetailScreen({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Local corrections</Text>
-        <Text style={styles.sectionHint}>
-          Reset exact item-name matches remembered for this merchant.
-        </Text>
         <Pressable
           accessibilityRole="button"
-          onPress={resetRules}
-          disabled={busy !== null}
-          style={styles.secondaryWide}
+          accessibilityState={{ expanded: showLocalCorrections }}
+          onPress={() => setShowLocalCorrections((current) => !current)}
+          style={styles.evidenceHeader}
         >
-          <Text style={styles.secondaryWideText}>
-            {busy === 'rules' ? 'Resetting…' : 'Reset remembered matches'}
-          </Text>
+          <View style={styles.itemCopy}>
+            <Text style={styles.sectionTitle}>Local corrections</Text>
+            <Text style={styles.sectionHint}>
+              Merchant-specific remembered item names
+            </Text>
+          </View>
+          <Ionicons
+            name={showLocalCorrections ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textMuted}
+          />
         </Pressable>
+
+        {showLocalCorrections ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={resetRules}
+            disabled={busy !== null}
+            style={styles.secondaryWide}
+          >
+            <Text style={styles.secondaryWideText}>
+              {busy === 'rules' ? 'Resetting…' : 'Reset remembered matches'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {notice ? (

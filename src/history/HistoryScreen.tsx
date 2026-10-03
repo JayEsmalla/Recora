@@ -54,13 +54,10 @@ export function HistoryScreen({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const hasFilters = Boolean(
-    query.trim() ||
-      merchantQuery.trim() ||
-      categoryId ||
-      fromDate.trim() ||
-      toDate.trim(),
+  const advancedFiltersActive = Boolean(
+    merchantQuery.trim() || categoryId || fromDate.trim() || toDate.trim(),
   );
+  const hasFilters = Boolean(query.trim() || advancedFiltersActive);
 
   async function search(
     overrides: Partial<HistoryFilters> = {},
@@ -160,6 +157,7 @@ export function HistoryScreen({
       style={styles.screen}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
     >
       <View style={styles.topRow}>
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
@@ -207,16 +205,30 @@ export function HistoryScreen({
             disabled={busy}
             style={styles.primarySmall}
           >
-            {busy ? <ActivityIndicator color="#FFFFFF" /> : null}
+            {busy ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Ionicons name="search" size={17} color="#FFFFFF" />
+            )}
             <Text style={styles.primarySmallText}>Search</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{ expanded: filtersOpen }}
             onPress={() => setFiltersOpen((current) => !current)}
             style={styles.secondarySmall}
           >
+            <Ionicons
+              name="options-outline"
+              size={17}
+              color={colors.primary}
+            />
             <Text style={styles.secondarySmallText}>
-              {filtersOpen ? 'Hide filters' : 'Filters'}
+              {filtersOpen
+                ? 'Hide filters'
+                : advancedFiltersActive
+                  ? 'Filters · On'
+                  : 'Filters'}
             </Text>
           </Pressable>
         </View>
@@ -623,6 +635,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
+    flexDirection: 'row',
+    gap: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
