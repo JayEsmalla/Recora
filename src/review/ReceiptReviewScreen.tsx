@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +14,7 @@ import {
 
 import type { AdjustmentKind, TransactionType, ValidationState } from '../domain/receipt';
 import type { ValidationIssue } from '../validation/types';
+import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 import {
   createBlankAdjustment,
   createBlankReviewItem,
@@ -204,22 +206,24 @@ export function ReceiptReviewScreen({
     (evaluation.validation.state !== 'review' || acknowledgeReview);
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={styles.screen}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.topRow}>
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
           <Text style={styles.linkText}>‹ Home</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>REVIEW RECEIPT</Text>
+        <Text style={styles.eyebrow}>REVIEW</Text>
       </View>
 
       <Text style={styles.title}>Review receipt</Text>
       <Text style={styles.body}>
-        Correct highlighted fields. Original image and OCR evidence stay unchanged.
+        Check highlighted fields before saving this purchase.
       </Text>
 
       <StatusCard
@@ -255,7 +259,11 @@ export function ReceiptReviewScreen({
                 </Text>
                 <Text style={styles.issueMessage}>{issue.message}</Text>
               </View>
-              <Text style={styles.jumpMark}>›</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.textMuted}
+              />
             </Pressable>
           ))}
         </View>
@@ -672,10 +680,14 @@ export function ReceiptReviewScreen({
           <View style={styles.sectionHeaderCopy}>
             <Text style={styles.sectionTitle}>Original evidence</Text>
             <Text style={styles.sectionHint}>
-              This source is read-only and is never overwritten by corrections.
+              Original image and OCR text · read-only
             </Text>
           </View>
-          <Text style={styles.jumpMark}>{showEvidence ? '⌃' : '⌄'}</Text>
+          <Ionicons
+            name={showEvidence ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textMuted}
+          />
         </Pressable>
 
         {showEvidence ? (
@@ -714,8 +726,7 @@ export function ReceiptReviewScreen({
             <Text style={styles.checkboxText}>{acknowledgeReview ? '✓' : ''}</Text>
           </View>
           <Text style={styles.ackText}>
-            I checked the remaining warnings against the original receipt and want
-            to keep these values.
+            I checked these warnings against the original receipt.
           </Text>
         </Pressable>
       ) : null}
@@ -732,46 +743,9 @@ export function ReceiptReviewScreen({
         </View>
       ) : null}
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={saveDraft}
-        disabled={
-          busyAction !== null ||
-          validationPending ||
-          evaluation.inputErrors.length > 0
-        }
-        style={[
-          styles.secondaryButton,
-          (busyAction !== null ||
-            validationPending ||
-            evaluation.inputErrors.length > 0) &&
-            styles.disabledButton,
-        ]}
-      >
-        {busyAction === 'draft' ? <ActivityIndicator /> : null}
-        <Text style={styles.secondaryButtonText}>
-          {busyAction === 'draft' ? 'Saving draft…' : 'Save review draft'}
-        </Text>
-      </Pressable>
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={acceptReceipt}
-        disabled={!canAccept || busyAction !== null}
-        style={[
-          styles.primaryButton,
-          (!canAccept || busyAction !== null) && styles.disabledButton,
-        ]}
-      >
-        {busyAction === 'accept' ? <ActivityIndicator color="#FFFFFF" /> : null}
-        <Text style={styles.primaryButtonText}>
-          {busyAction === 'accept' ? 'Saving receipt…' : 'Save to purchase history'}
-        </Text>
-      </Pressable>
-
       {evaluation.validation.state === 'mismatch' ? (
         <Text style={styles.blockingHint}>
-          Resolve every mismatch before this receipt can enter purchase history.
+          Fix every mismatch before saving this receipt.
         </Text>
       ) : null}
 
@@ -782,10 +756,52 @@ export function ReceiptReviewScreen({
         style={styles.discardButton}
       >
         <Text style={styles.discardButtonText}>
-          {busyAction === 'discard' ? 'Discarding…' : 'Discard receipt draft'}
+          {busyAction === 'discard' ? 'Discarding…' : 'Discard receipt'}
         </Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+
+      <View style={styles.actionBar}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={saveDraft}
+          disabled={
+            busyAction !== null ||
+            validationPending ||
+            evaluation.inputErrors.length > 0
+          }
+          style={[
+            styles.footerSecondaryButton,
+            (busyAction !== null ||
+              validationPending ||
+              evaluation.inputErrors.length > 0) &&
+              styles.disabledButton,
+          ]}
+        >
+          {busyAction === 'draft' ? <ActivityIndicator /> : null}
+          <Text style={styles.footerSecondaryText}>
+            {busyAction === 'draft' ? 'Saving…' : 'Save draft'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={acceptReceipt}
+          disabled={!canAccept || busyAction !== null}
+          style={[
+            styles.footerPrimaryButton,
+            (!canAccept || busyAction !== null) && styles.disabledButton,
+          ]}
+        >
+          {busyAction === 'accept' ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : null}
+          <Text style={styles.footerPrimaryText}>
+            {busyAction === 'accept' ? 'Saving…' : 'Save receipt'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -833,10 +849,10 @@ function StatusCard({
 }) {
   const message =
     state === 'verified'
-      ? 'Arithmetic and required structured fields currently reconcile.'
+      ? 'Totals and required fields match.'
       : state === 'review'
-        ? `${issueCount} non-blocking warning${issueCount === 1 ? '' : 's'} still need human confirmation.`
-        : `${issueCount} issue${issueCount === 1 ? '' : 's'} include at least one blocking mismatch.`;
+        ? `${issueCount} warning${issueCount === 1 ? '' : 's'} need your confirmation.`
+        : `Fix ${issueCount} issue${issueCount === 1 ? '' : 's'} before saving.`;
 
   return (
     <View style={styles.statusCard}>
@@ -848,11 +864,38 @@ function StatusCard({
 
 function StateBadge({ state }: { state: ValidationState }) {
   return (
-    <View style={styles.stateBadge}>
-      <Text style={styles.stateBadgeIcon}>
+    <View
+      style={[
+        styles.stateBadge,
+        state === 'verified'
+          ? styles.stateBadgeVerified
+          : state === 'review'
+            ? styles.stateBadgeReview
+            : styles.stateBadgeMismatch,
+      ]}
+    >
+      <Text
+        style={[
+          styles.stateBadgeIcon,
+          state === 'verified'
+            ? styles.stateTextVerified
+            : state === 'review'
+              ? styles.stateTextReview
+              : styles.stateTextMismatch,
+        ]}
+      >
         {state === 'verified' ? '✓' : state === 'review' ? '?' : '!'}
       </Text>
-      <Text style={styles.stateBadgeText}>
+      <Text
+        style={[
+          styles.stateBadgeText,
+          state === 'verified'
+            ? styles.stateTextVerified
+            : state === 'review'
+              ? styles.stateTextReview
+              : styles.stateTextMismatch,
+        ]}
+      >
         {state === 'verified'
           ? 'Verified'
           : state === 'review'
@@ -926,76 +969,229 @@ function messageFromError(error: unknown, fallback: string): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F6F2' },
-  content: { padding: 20, paddingBottom: 48 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: 24,
+  },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   linkButton: { minHeight: 44, justifyContent: 'center' },
-  linkText: { color: '#3F6B5B', fontSize: 14, fontWeight: '800' },
-  eyebrow: { color: '#3F6B5B', fontSize: 11, fontWeight: '900', letterSpacing: 1.6 },
-  title: { color: '#1F2321', fontSize: 28, fontWeight: '800', lineHeight: 34, marginTop: 10 },
-  body: { color: '#6F756F', fontSize: 14, lineHeight: 21, marginTop: 8 },
-  statusCard: { marginTop: 18, padding: 16, borderRadius: 16, backgroundColor: '#FFFFFF', borderColor: '#E2E1DC', borderWidth: 1, gap: 10 },
-  stateBadge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: '#EEF3F0' },
-  stateBadgeIcon: { color: '#2D5145', fontWeight: '900' },
-  stateBadgeText: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
-  statusMessage: { color: '#4F5651', fontSize: 13, lineHeight: 19 },
-  issueList: { marginTop: 16, borderRadius: 16, backgroundColor: '#FFFFFF', borderColor: '#E2E1DC', borderWidth: 1, padding: 16 },
+  linkText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
+  eyebrow: {
+    color: colors.primaryAlt,
+    ...typography.label,
+    letterSpacing: 1.4,
+  },
+  title: {
+    color: colors.text,
+    ...typography.title,
+    marginTop: spacing.sm,
+  },
+  body: {
+    color: colors.textMuted,
+    ...typography.body,
+    marginTop: spacing.sm,
+  },
+  statusCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    gap: spacing.sm,
+    ...shadows.card,
+  },
+  stateBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+  stateBadgeVerified: { backgroundColor: colors.successSoft },
+  stateBadgeReview: { backgroundColor: colors.warningSoft },
+  stateBadgeMismatch: { backgroundColor: colors.errorSoft },
+  stateBadgeIcon: { fontWeight: '900' },
+  stateBadgeText: { fontSize: 12, fontWeight: '900' },
+  stateTextVerified: { color: colors.success },
+  stateTextReview: { color: '#865D18' },
+  stateTextMismatch: { color: colors.error },
+  statusMessage: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  issueList: {
+    marginTop: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
   issueRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, minHeight: 52, paddingVertical: 8 },
   issueMismatch: { width: 24, height: 24, lineHeight: 24, textAlign: 'center', borderRadius: 12, backgroundColor: '#F6D7D7', color: '#8E2F2F', fontWeight: '900' },
   issueReview: { width: 24, height: 24, lineHeight: 24, textAlign: 'center', borderRadius: 12, backgroundColor: '#F7E9C8', color: '#6A4A17', fontWeight: '900' },
   issueCopy: { flex: 1 },
-  issueState: { color: '#1F2321', fontSize: 12, fontWeight: '900' },
-  issueMessage: { color: '#616761', fontSize: 13, lineHeight: 18, marginTop: 2 },
-  jumpMark: { color: '#7B817C', fontSize: 24 },
-  card: { marginTop: 16, padding: 16, borderRadius: 16, backgroundColor: '#FFFFFF', borderColor: '#E2E1DC', borderWidth: 1 },
+  issueState: { color: colors.text, fontSize: 12, fontWeight: '900' },
+  issueMessage: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  jumpMark: { color: colors.textMuted, fontSize: 24 },
+  card: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' },
   sectionHeaderCopy: { flex: 1 },
-  sectionTitle: { color: '#1F2321', fontSize: 17, fontWeight: '900' },
-  sectionHint: { color: '#757B76', fontSize: 12, lineHeight: 18, marginTop: 3 },
+  sectionTitle: { color: colors.text, ...typography.section },
+  sectionHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
   labelRow: { marginTop: 14, marginBottom: 6 },
   fieldLabel: { color: '#3D423F', fontSize: 12, fontWeight: '800' },
   fieldHint: { color: '#8A908B', fontSize: 10, marginTop: 2 },
-  textInput: { minHeight: 46, borderRadius: 11, borderWidth: 1, borderColor: '#CFD3CF', backgroundColor: '#FAFAF8', color: '#1F2321', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
-  invalidInput: { borderColor: '#B93D3D' },
+  textInput: {
+    minHeight: 48,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.background,
+    color: colors.text,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  invalidInput: { borderColor: colors.error },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   chip: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: '#CCD0CC', backgroundColor: '#FFFFFF' },
-  chipSelected: { backgroundColor: '#E6EFEA', borderColor: '#739688' },
-  chipText: { color: '#606661', fontSize: 12, fontWeight: '700' },
-  chipTextSelected: { color: '#2D5145', fontWeight: '900' },
+  chipSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  chipText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
+  chipTextSelected: { color: colors.primary, fontWeight: '900' },
   moneyRow: { flexDirection: 'row', gap: 10 },
   moneyColumn: { flex: 1 },
-  smallButton: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#E6EFEA' },
-  smallButtonText: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
-  loadMoreButton: { minHeight: 44, marginTop: 14, borderRadius: 11, borderWidth: 1, borderColor: '#C6CBC7', alignItems: 'center', justifyContent: 'center' },
-  loadMoreButtonText: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
-  emptyText: { color: '#797F7A', fontSize: 13, lineHeight: 19, marginTop: 12 },
-  itemCard: { marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E4E5E1', backgroundColor: '#FCFCFA' },
+  smallButton: {
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: radii.sm,
+    backgroundColor: colors.accentSoft,
+  },
+  smallButtonText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
+  loadMoreButton: {
+    minHeight: 44,
+    marginTop: 14,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreButtonText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
+  emptyText: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 12 },
+  itemCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FBFCFA',
+  },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  itemTitle: { color: '#1F2321', fontSize: 14, fontWeight: '900' },
+  itemTitle: { color: colors.text, fontSize: 14, fontWeight: '900' },
   threeColumnRow: { flexDirection: 'row', gap: 7 },
   flexField: { flex: 1 },
   removeButton: { alignSelf: 'flex-start', marginTop: 14, paddingVertical: 5 },
-  removeButtonText: { color: '#9A3030', fontSize: 12, fontWeight: '800' },
+  removeButtonText: { color: colors.error, fontSize: 12, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
   receiptImage: { width: '100%', height: 360, marginTop: 16, borderRadius: 12, backgroundColor: '#ECEDE9' },
-  evidenceLabel: { color: '#3F6B5B', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 16 },
+  evidenceLabel: { color: colors.primaryAlt, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 16 },
   ocrText: { color: '#303431', fontFamily: 'monospace', fontSize: 12, lineHeight: 18, marginTop: 8 },
-  ackRow: { marginTop: 18, flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 14, backgroundColor: '#FFF8E8' },
-  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#A0A69F', alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#3F6B5B', borderColor: '#3F6B5B' },
+  ackRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    borderRadius: radii.md,
+    backgroundColor: colors.warningSoft,
+  },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkboxText: { color: '#FFFFFF', fontWeight: '900' },
-  ackText: { flex: 1, color: '#4D514E', fontSize: 13, lineHeight: 19 },
-  noticeBox: { marginTop: 14, backgroundColor: '#E6EFEA', borderRadius: 12, padding: 12 },
-  noticeText: { color: '#2D5145', fontSize: 12, fontWeight: '700' },
-  errorBox: { marginTop: 14, backgroundColor: '#FBECEC', borderRadius: 12, padding: 12 },
-  errorTitle: { color: '#9A3030', fontSize: 12, fontWeight: '900', marginBottom: 4 },
-  errorText: { color: '#9A3030', fontSize: 12, lineHeight: 18 },
-  secondaryButton: { minHeight: 52, borderRadius: 14, borderWidth: 1, borderColor: '#BCC2BD', backgroundColor: '#FFFFFF', marginTop: 18, paddingHorizontal: 18, flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center' },
-  secondaryButtonText: { color: '#2D5145', fontSize: 14, fontWeight: '900' },
-  primaryButton: { minHeight: 54, borderRadius: 14, backgroundColor: '#3F6B5B', marginTop: 10, paddingHorizontal: 18, flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center' },
-  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  ackText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19 },
+  noticeBox: { marginTop: 14, backgroundColor: colors.successSoft, borderRadius: radii.md, padding: 12 },
+  noticeText: { color: colors.success, fontSize: 12, fontWeight: '700' },
+  errorBox: { marginTop: 14, backgroundColor: colors.errorSoft, borderRadius: radii.md, padding: 12 },
+  errorTitle: { color: colors.error, fontSize: 12, fontWeight: '900', marginBottom: 4 },
+  errorText: { color: colors.error, fontSize: 12, lineHeight: 18 },
+  actionBar: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: 14,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  footerSecondaryButton: {
+    minWidth: 112,
+    minHeight: 50,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerSecondaryText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  footerPrimaryButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  footerPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   disabledButton: { opacity: 0.45 },
-  blockingHint: { color: '#8E2F2F', fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 8 },
-  discardButton: { alignSelf: 'center', marginTop: 18, padding: 10 },
-  discardButtonText: { color: '#9A3030', fontSize: 12, fontWeight: '800' },
+  blockingHint: {
+    color: colors.error,
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  discardButton: { alignSelf: 'center', marginTop: 16, padding: 10 },
+  discardButtonText: { color: colors.error, fontSize: 12, fontWeight: '800' },
 });

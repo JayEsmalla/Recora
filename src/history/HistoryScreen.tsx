@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +19,7 @@ import type {
   HistoryLoadMode,
   HistoryOverview,
 } from './HistoryService';
+import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 
 interface HistoryScreenProps {
   initialOverview: HistoryOverview;
@@ -52,6 +54,13 @@ export function HistoryScreen({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasFilters = Boolean(
+    query.trim() ||
+      merchantQuery.trim() ||
+      categoryId ||
+      fromDate.trim() ||
+      toDate.trim(),
+  );
 
   async function search(
     overrides: Partial<HistoryFilters> = {},
@@ -156,11 +165,13 @@ export function HistoryScreen({
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
           <Text style={styles.linkText}>‹ Home</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>PURCHASE HISTORY</Text>
+        <Text style={styles.eyebrow}>HISTORY</Text>
       </View>
 
-      <Text style={styles.title}>Receipts & items</Text>
-      <Text style={styles.body}>Only reviewed receipts appear in history.</Text>
+      <Text style={styles.title}>Purchase history</Text>
+      <Text style={styles.body}>
+        Find reviewed receipts, items, and previous prices.
+      </Text>
 
       <View style={styles.modeRow}>
         <ModeButton
@@ -289,10 +300,15 @@ export function HistoryScreen({
       {mode === 'receipts' ? (
         <ReceiptList
           receipts={overview.receipts}
+          hasFilters={hasFilters}
           onOpenReceipt={onOpenReceipt}
         />
       ) : (
-        <ItemList items={overview.items} onOpenItem={onOpenItem} />
+        <ItemList
+          items={overview.items}
+          hasFilters={hasFilters}
+          onOpenItem={onOpenItem}
+        />
       )}
     </ScrollView>
   );
@@ -300,16 +316,22 @@ export function HistoryScreen({
 
 function ReceiptList({
   receipts,
+  hasFilters,
   onOpenReceipt,
 }: {
   receipts: ReceiptHistoryEntry[];
+  hasFilters: boolean;
   onOpenReceipt: (receiptId: string) => void;
 }) {
   if (receipts.length === 0) {
     return (
       <EmptyState
-        title="No matching receipts"
-        text="Accepted receipts that match your filters will appear here."
+        title={hasFilters ? 'No matching receipts' : 'No receipts yet'}
+        text={
+          hasFilters
+            ? 'Try a different search or clear a filter.'
+            : 'Scan and save a receipt to start your purchase history.'
+        }
       />
     );
   }
@@ -342,7 +364,11 @@ function ReceiptList({
             <Text style={styles.money}>
               {formatMoney(receipt.totalMinor, receipt.currencyCode)}
             </Text>
-            <Text style={styles.chevron}>›</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.textMuted}
+            />
           </View>
         </Pressable>
       ))}
@@ -352,16 +378,22 @@ function ReceiptList({
 
 function ItemList({
   items,
+  hasFilters,
   onOpenItem,
 }: {
   items: ItemSearchEntry[];
+  hasFilters: boolean;
   onOpenItem: (item: ItemSearchEntry) => void;
 }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        title="No matching items"
-        text="Items from accepted receipts that match your filters will appear here."
+        title={hasFilters ? 'No matching items' : 'No item history yet'}
+        text={
+          hasFilters
+            ? 'Try another item name or clear a filter.'
+            : 'Reviewed receipt items will appear here after you save a receipt.'
+        }
       />
     );
   }
@@ -399,7 +431,11 @@ function ItemList({
                 item.currencyCode,
               )}
             </Text>
-            <Text style={styles.chevron}>›</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.textMuted}
+            />
           </View>
         </Pressable>
       ))}
@@ -495,33 +531,33 @@ function messageFromError(error: unknown, fallback: string): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F6F2' },
-  content: { padding: 20, paddingBottom: 48 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: 48,
+  },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   linkButton: { minHeight: 44, justifyContent: 'center' },
-  linkText: { color: '#3F6B5B', fontSize: 14, fontWeight: '800' },
+  linkText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
   eyebrow: {
-    color: '#3F6B5B',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.6,
+    color: colors.primaryAlt,
+    ...typography.label,
+    letterSpacing: 1.4,
   },
   title: {
-    color: '#1F2321',
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 34,
-    marginTop: 10,
+    color: colors.text,
+    ...typography.title,
+    marginTop: spacing.sm,
   },
   body: {
-    color: '#6F756F',
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 8,
+    color: colors.textMuted,
+    ...typography.body,
+    marginTop: spacing.sm,
   },
   modeRow: {
     flexDirection: 'row',
@@ -531,35 +567,36 @@ const styles = StyleSheet.create({
   modeButton: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 12,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#CFD3CF',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   modeButtonSelected: {
-    backgroundColor: '#3F6B5B',
-    borderColor: '#3F6B5B',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  modeText: { color: '#59605B', fontSize: 13, fontWeight: '800' },
+  modeText: { color: colors.textMuted, fontSize: 13, fontWeight: '800' },
   modeTextSelected: { color: '#FFFFFF' },
   searchCard: {
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 16,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.card,
   },
   textInput: {
-    minHeight: 46,
-    borderRadius: 11,
+    minHeight: 48,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#CFD3CF',
-    backgroundColor: '#FAFAF8',
-    color: '#1F2321',
-    paddingHorizontal: 12,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.background,
+    color: colors.text,
+    paddingHorizontal: 13,
     paddingVertical: 10,
     fontSize: 14,
   },
@@ -572,7 +609,7 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 11,
     paddingHorizontal: 14,
-    backgroundColor: '#3F6B5B',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     gap: 7,
     alignItems: 'center',
@@ -581,15 +618,15 @@ const styles = StyleSheet.create({
   primarySmallText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
   secondarySmall: {
     minHeight: 42,
-    borderRadius: 11,
+    borderRadius: radii.md,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#C7CCC8',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondarySmallText: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
+  secondarySmallText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
   filters: {
     marginTop: 14,
     paddingTop: 10,
@@ -615,56 +652,70 @@ const styles = StyleSheet.create({
     borderColor: '#CCD0CC',
     backgroundColor: '#FFFFFF',
   },
-  chipSelected: { backgroundColor: '#E6EFEA', borderColor: '#739688' },
-  chipText: { color: '#606661', fontSize: 11, fontWeight: '700' },
-  chipTextSelected: { color: '#2D5145', fontWeight: '900' },
+  chipSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  chipText: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  chipTextSelected: { color: colors.primary, fontWeight: '900' },
   filterActions: { flexDirection: 'row', gap: 8, marginTop: 14 },
   errorBox: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#FBECEC',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.errorSoft,
   },
-  errorText: { color: '#9A3030', fontSize: 12, lineHeight: 18 },
-  resultSection: { marginTop: 18, gap: 10 },
-  resultCount: { color: '#6F756F', fontSize: 12, fontWeight: '700' },
+  errorText: { color: colors.error, fontSize: 12, lineHeight: 18 },
+  resultSection: { marginTop: spacing.lg, gap: spacing.sm },
+  resultCount: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   resultCard: {
     minHeight: 86,
-    borderRadius: 15,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
+    ...shadows.card,
   },
   resultCopy: { flex: 1 },
-  resultTitle: { color: '#1F2321', fontSize: 15, fontWeight: '900' },
-  rawName: { color: '#777D78', fontSize: 11, marginTop: 2 },
-  resultMeta: { color: '#6B716C', fontSize: 11, lineHeight: 16, marginTop: 4 },
+  resultTitle: { color: colors.text, fontSize: 15, fontWeight: '900' },
+  rawName: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  resultMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
   categoryLabel: {
     alignSelf: 'flex-start',
     marginTop: 5,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: '#EEF3F0',
-    color: '#3F6B5B',
+    backgroundColor: colors.surfaceMuted,
+    color: colors.primary,
     fontSize: 10,
     fontWeight: '800',
   },
   resultRight: { alignItems: 'flex-end', gap: 5 },
-  money: { color: '#1F2321', fontSize: 14, fontWeight: '900' },
-  chevron: { color: '#777D78', fontSize: 22 },
+  money: { color: colors.text, fontSize: 14, fontWeight: '900' },
+  chevron: { color: colors.textMuted, fontSize: 22 },
   emptyCard: {
     marginTop: 20,
-    borderRadius: 16,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: 20,
   },
-  emptyTitle: { color: '#1F2321', fontSize: 15, fontWeight: '900' },
-  emptyText: { color: '#6F756F', fontSize: 13, lineHeight: 19, marginTop: 5 },
+  emptyTitle: { color: colors.text, fontSize: 15, fontWeight: '900' },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 5,
+  },
 });

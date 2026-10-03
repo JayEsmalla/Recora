@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import {
   Pressable,
@@ -8,6 +9,7 @@ import {
 } from 'react-native';
 
 import type { ItemHistorySummary } from './types';
+import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 
 interface ItemHistoryScreenProps {
   summary: ItemHistorySummary;
@@ -29,12 +31,16 @@ export function ItemHistoryScreen({
   );
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.topRow}>
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
           <Text style={styles.linkText}>‹ History</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>ITEM HISTORY</Text>
+        <Text style={styles.eyebrow}>ITEM</Text>
       </View>
 
       <Text style={styles.title}>{title}</Text>
@@ -54,7 +60,7 @@ export function ItemHistoryScreen({
       </View>
 
       <View style={styles.rangeCard}>
-        <Text style={styles.rangeLabel}>Observed purchase range</Text>
+        <Text style={styles.rangeLabel}>PURCHASE RANGE</Text>
         <Text style={styles.rangeValue}>
           {formatDate(summary.firstPurchasedAt)} → {formatDate(summary.lastPurchasedAt)}
         </Text>
@@ -92,7 +98,11 @@ export function ItemHistoryScreen({
               <Text style={styles.priceLabel}>
                 {point.unitPriceMinor !== null ? 'unit price' : 'line total'}
               </Text>
-              <Text style={styles.chevron}>›</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={17}
+                color={colors.textMuted}
+              />
             </View>
           </Pressable>
         ))}
@@ -116,16 +126,16 @@ export function ItemHistoryScreen({
 
       {summary.identity.normalizedName ? (
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Grouped identity</Text>
+          <Text style={styles.infoTitle}>Organized item</Text>
           <Text style={styles.infoText}>
-            Explicitly grouped as “{summary.identity.normalizedName}”. Original receipt names are preserved.
+            Grouped as “{summary.identity.normalizedName}”. Original receipt names stay unchanged.
           </Text>
         </View>
       ) : (
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Raw-description history</Text>
+          <Text style={styles.infoTitle}>Receipt-name history</Text>
           <Text style={styles.infoText}>
-            Uses the exact receipt name until you assign an organized identity.
+            Using the exact receipt name until this item is organized.
           </Text>
         </View>
       )}
@@ -174,46 +184,42 @@ function formatQuantity(value: number | null): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F6F2' },
-  content: { padding: 20, paddingBottom: 48 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: 48,
+  },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   linkButton: { minHeight: 44, justifyContent: 'center' },
-  linkText: { color: '#3F6B5B', fontSize: 14, fontWeight: '800' },
+  linkText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
   eyebrow: {
-    color: '#3F6B5B',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.6,
+    color: colors.primaryAlt,
+    ...typography.label,
+    letterSpacing: 1.4,
   },
   title: {
-    color: '#1F2321',
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 34,
-    marginTop: 10,
-  },
-  body: {
-    color: '#6F756F',
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 8,
+    color: colors.text,
+    ...typography.title,
+    marginTop: spacing.sm,
   },
   summaryRow: { flexDirection: 'row', gap: 9, marginTop: 18 },
   summaryBox: {
     flex: 1,
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
+    borderColor: colors.border,
+    ...shadows.card,
   },
-  summaryLabel: { color: '#777D78', fontSize: 10, fontWeight: '800' },
+  summaryLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
   summaryValue: {
-    color: '#1F2321',
+    color: colors.text,
     fontSize: 17,
     fontWeight: '900',
     marginTop: 5,
@@ -221,21 +227,21 @@ const styles = StyleSheet.create({
   rangeCard: {
     marginTop: 10,
     padding: 13,
-    borderRadius: 13,
-    backgroundColor: '#EEF3F0',
+    borderRadius: radii.md,
+    backgroundColor: colors.accentSoft,
   },
-  rangeLabel: { color: '#547064', fontSize: 10, fontWeight: '900' },
-  rangeValue: { color: '#2D5145', fontSize: 12, fontWeight: '800', marginTop: 4 },
+  rangeLabel: { color: colors.primaryAlt, fontSize: 10, fontWeight: '900' },
+  rangeValue: { color: colors.primary, fontSize: 12, fontWeight: '800', marginTop: 4 },
   section: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
+    borderColor: colors.border,
   },
-  sectionTitle: { color: '#1F2321', fontSize: 16, fontWeight: '900' },
-  sectionHint: { color: '#757B76', fontSize: 12, lineHeight: 18, marginTop: 3 },
+  sectionTitle: { color: colors.text, ...typography.section },
+  sectionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 3 },
   historyRow: {
     flexDirection: 'row',
     gap: 12,
@@ -244,21 +250,21 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ECEDE9',
   },
   historyCopy: { flex: 1 },
-  historyTitle: { color: '#1F2321', fontSize: 13, fontWeight: '900' },
-  historyMeta: { color: '#6F756F', fontSize: 11, lineHeight: 16, marginTop: 3 },
-  rawName: { color: '#858A86', fontSize: 10, lineHeight: 15, marginTop: 3 },
+  historyTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  historyMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  rawName: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 3 },
   priceCopy: { alignItems: 'flex-end' },
-  price: { color: '#1F2321', fontSize: 13, fontWeight: '900' },
-  priceLabel: { color: '#858A86', fontSize: 9, marginTop: 2 },
-  chevron: { color: '#858A86', fontSize: 18, marginTop: 3 },
-  loadMoreButton: { minHeight: 44, marginTop: 10, borderRadius: 11, borderWidth: 1, borderColor: '#C6CBC7', alignItems: 'center', justifyContent: 'center' },
-  loadMoreText: { color: '#2D5145', fontSize: 11, fontWeight: '900' },
+  price: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  priceLabel: { color: colors.textMuted, fontSize: 9, marginTop: 2 },
+  chevron: { color: colors.textMuted, fontSize: 18, marginTop: 3 },
+  loadMoreButton: { minHeight: 44, marginTop: 10, borderRadius: radii.md, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  loadMoreText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
   infoCard: {
-    marginTop: 16,
+    marginTop: spacing.lg,
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#EEF3F0',
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceMuted,
   },
-  infoTitle: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
-  infoText: { color: '#58605B', fontSize: 11, lineHeight: 17, marginTop: 4 },
+  infoTitle: { color: colors.primary, fontSize: 12, fontWeight: '900' },
+  infoText: { color: colors.textMuted, fontSize: 11, lineHeight: 17, marginTop: 4 },
 });

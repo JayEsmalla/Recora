@@ -6,6 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/recora-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F6F3"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ywach.recora"
@@ -13,9 +18,8 @@
     "android": {
       "allowBackup": false,
       "adaptiveIcon": {
-        "backgroundColor": "#F7F6F2",
+        "backgroundColor": "#F7F6F3",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": true,

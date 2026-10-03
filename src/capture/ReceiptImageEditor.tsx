@@ -4,6 +4,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   ActivityIndicator,
   Image,
@@ -34,6 +35,7 @@ import type {
   QualityIssue,
   ReceiptImageSource,
 } from './types';
+import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 
 interface ReceiptImageEditorProps {
   source: ReceiptImageSource;
@@ -162,11 +164,12 @@ export function ReceiptImageEditor({
       style={styles.screen}
       contentContainerStyle={styles.content}
       bounces={false}
+      showsVerticalScrollIndicator={false}
     >
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>PREPARE RECEIPT</Text>
-          <Text style={styles.title}>Crop receipt</Text>
+          <Text style={styles.eyebrow}>PREPARE</Text>
+          <Text style={styles.title}>Frame the receipt</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -180,7 +183,7 @@ export function ReceiptImageEditor({
       </View>
 
       <Text style={styles.instructions}>
-        Keep the store name, all items, and final total inside the frame.
+        Keep the header, every item, and the final total inside the crop.
       </Text>
 
       <View style={styles.imageStage} onLayout={handleLayout}>
@@ -251,7 +254,10 @@ export function ReceiptImageEditor({
           style={styles.secondaryButton}
           disabled={busy}
         >
-          <Text style={styles.secondaryButtonText}>Rotate left</Text>
+          <View style={styles.toolbarButtonContent}>
+            <Ionicons name="arrow-undo-outline" size={17} color={colors.primary} />
+            <Text style={styles.secondaryButtonText}>Left</Text>
+          </View>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -262,7 +268,10 @@ export function ReceiptImageEditor({
           style={styles.secondaryButton}
           disabled={busy}
         >
-          <Text style={styles.secondaryButtonText}>Reset crop</Text>
+          <View style={styles.toolbarButtonContent}>
+            <Ionicons name="scan-outline" size={17} color={colors.primary} />
+            <Text style={styles.secondaryButtonText}>Reset</Text>
+          </View>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -270,15 +279,18 @@ export function ReceiptImageEditor({
           style={styles.secondaryButton}
           disabled={busy}
         >
-          <Text style={styles.secondaryButtonText}>Rotate right</Text>
+          <View style={styles.toolbarButtonContent}>
+            <Ionicons name="arrow-redo-outline" size={17} color={colors.primary} />
+            <Text style={styles.secondaryButtonText}>Right</Text>
+          </View>
         </Pressable>
       </View>
 
       <View style={styles.checkCard}>
-        <Text style={styles.sectionTitle}>Photo check</Text>
+        <Text style={styles.sectionTitle}>Ready to read?</Text>
         <QualityCheck
           checked={checks.readableAndComplete}
-          label="Text is clear and the full receipt is visible"
+          label="Text is readable and the complete receipt is visible"
           onPress={() =>
             setChecks((current) => ({
               readableAndComplete: !current.readableAndComplete,
@@ -320,7 +332,7 @@ export function ReceiptImageEditor({
       >
         {busy ? <ActivityIndicator color="#FFFFFF" /> : null}
         <Text style={styles.primaryButtonText}>
-          {busy ? 'Preparing…' : 'Continue'}
+          {busy ? 'Preparing…' : 'Use this receipt'}
         </Text>
       </Pressable>
     </ScrollView>
@@ -495,10 +507,11 @@ function messageFromError(error: unknown, fallback: string): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F7F6F2',
+    backgroundColor: colors.background,
   },
   content: {
-    padding: 20,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
     paddingBottom: 40,
   },
   headerRow: {
@@ -511,40 +524,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   eyebrow: {
-    color: '#3F6B5B',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.8,
-    marginBottom: 8,
+    color: colors.primaryAlt,
+    ...typography.label,
+    letterSpacing: 1.3,
+    marginBottom: spacing.xs,
   },
   title: {
-    color: '#1F2321',
-    fontSize: 25,
-    fontWeight: '800',
-    lineHeight: 31,
+    color: colors.text,
+    ...typography.title,
   },
   instructions: {
-    color: '#6F756F',
+    color: colors.textMuted,
     fontSize: 14,
-    lineHeight: 21,
-    marginTop: 10,
-    marginBottom: 16,
+    lineHeight: 20,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
   linkButton: {
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
   linkButtonText: {
-    color: '#3F6B5B',
-    fontWeight: '700',
+    color: colors.primary,
+    fontWeight: '800',
   },
   imageStage: {
-    height: 430,
+    height: 440,
     overflow: 'hidden',
-    backgroundColor: '#1F2321',
-    borderRadius: 18,
+    backgroundColor: colors.text,
+    borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
+    borderColor: '#1F2E2C',
+    ...shadows.card,
   },
   image: {
     position: 'absolute',
@@ -565,46 +576,50 @@ const styles = StyleSheet.create({
     height: HANDLE_SIZE,
     borderRadius: HANDLE_SIZE / 2,
     backgroundColor: '#FFFFFF',
-    borderColor: '#3F6B5B',
+    borderColor: colors.accent,
     borderWidth: 4,
   },
   toolbar: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   secondaryButton: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 12,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#C9CBC7',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
+  },
+  toolbarButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   secondaryButtonText: {
-    color: '#2D5145',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
     textAlign: 'center',
   },
   checkCard: {
-    marginTop: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
-    padding: 16,
+    borderColor: colors.border,
+    padding: spacing.lg,
   },
   sectionTitle: {
-    color: '#1F2321',
-    fontSize: 16,
-    fontWeight: '800',
+    color: colors.text,
+    ...typography.section,
   },
   sectionHint: {
-    color: '#6F756F',
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 5,
@@ -626,8 +641,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#3F6B5B',
-    borderColor: '#3F6B5B',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   checkboxText: {
     color: '#FFFFFF',
@@ -635,18 +650,18 @@ const styles = StyleSheet.create({
   },
   checkLabel: {
     flex: 1,
-    color: '#1F2321',
+    color: colors.text,
     fontSize: 14,
     lineHeight: 20,
   },
   issueCard: {
-    marginTop: 14,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
-    padding: 16,
-    gap: 10,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
   },
   issueRow: {
     flexDirection: 'row',
@@ -668,7 +683,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     textAlign: 'center',
-    color: '#1F2321',
+    color: colors.text,
     backgroundColor: '#EFCB8C',
     fontWeight: '900',
     lineHeight: 22,
@@ -691,15 +706,16 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   primaryButton: {
-    minHeight: 54,
-    borderRadius: 14,
-    backgroundColor: '#3F6B5B',
-    marginTop: 18,
+    minHeight: 56,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+    marginTop: spacing.lg,
     paddingHorizontal: 18,
     flexDirection: 'row',
     gap: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.card,
   },
   disabledButton: {
     opacity: 0.7,

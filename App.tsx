@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -64,6 +65,8 @@ import { ParserProcessingService } from './src/parser/ParserProcessingService';
 import { ReceiptReviewScreen } from './src/review/ReceiptReviewScreen';
 import { ReviewService } from './src/review/ReviewService';
 import type { ReviewDraft, ReviewSession } from './src/review/types';
+import { BrandMark } from './src/ui/BrandMark';
+import { colors, radii, shadows, spacing, typography } from './src/ui/theme';
 
 type BootState = 'loading' | 'ready' | 'error';
 type AppScreen =
@@ -671,10 +674,9 @@ export default function App() {
         <StatusBar style="dark" />
         <View style={styles.centeredPage}>
           <ActivityIndicator size="large" />
-          <Text style={styles.bootTitle}>Reconstructing receipt</Text>
+          <Text style={styles.bootTitle}>Building your receipt</Text>
           <Text style={styles.centeredBody}>
-            Recora is rebuilding structured items from saved OCR evidence and
-            checking the arithmetic before review.
+            Organizing items and checking totals.
           </Text>
         </View>
       </SafeAreaView>
@@ -736,10 +738,9 @@ export default function App() {
           <View style={styles.successMark}>
             <Text style={styles.successMarkText}>✓</Text>
           </View>
-          <Text style={styles.pageTitle}>Receipt saved.</Text>
+          <Text style={styles.pageTitle}>Receipt saved</Text>
           <Text style={styles.centeredBody}>
-            The reviewed receipt is now part of local purchase history. Only the
-            values you confirmed are used for tracking.
+            Added to your purchase history.
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -763,10 +764,8 @@ export default function App() {
         <StatusBar style="dark" />
         <View style={styles.centeredPage}>
           <ActivityIndicator size="large" />
-          <Text style={styles.bootTitle}>Loading local purchase history</Text>
-          <Text style={styles.centeredBody}>
-            Recora is reading reviewed receipts from the on-device database.
-          </Text>
+          <Text style={styles.bootTitle}>Opening purchase history</Text>
+          <Text style={styles.centeredBody}>Loading reviewed receipts.</Text>
         </View>
       </SafeAreaView>
     );
@@ -854,7 +853,12 @@ export default function App() {
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
         <View style={styles.centeredPage}>
-          <ActivityIndicator size="large" />
+          <BrandMark size={72} />
+          <ActivityIndicator
+            color={colors.primary}
+            size="small"
+            style={styles.processingIndicator}
+          />
           <Text style={styles.bootTitle}>
             {ocrProgressTitle(ocrProgress?.stage)}
           </Text>
@@ -880,7 +884,7 @@ export default function App() {
         <StatusBar style="dark" />
         <View style={styles.centeredPage}>
           <Text style={styles.errorMark}>!</Text>
-          <Text style={styles.bootTitle}>Text recognition did not finish</Text>
+          <Text style={styles.bootTitle}>Couldn’t read this receipt</Text>
           <Text style={styles.centeredBody}>
             {ocrError ??
               'The receipt draft is still stored safely. You can retry without recapturing it.'}
@@ -891,7 +895,7 @@ export default function App() {
               onPress={() => runOfflineOcr(preparedReceiptId)}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>Retry offline OCR</Text>
+              <Text style={styles.primaryButtonText}>Try again</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -899,7 +903,7 @@ export default function App() {
             onPress={() => setScreen('prepared')}
             style={styles.secondaryWideButton}
           >
-            <Text style={styles.secondaryWideButtonText}>Return to receipt draft</Text>
+            <Text style={styles.secondaryWideButtonText}>Back to draft</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -914,8 +918,8 @@ export default function App() {
           <View style={styles.successMark}>
             <Text style={styles.successMarkText}>✓</Text>
           </View>
-          <Text style={styles.pageTitle}>Receipt ready to continue.</Text>
-          <Text style={styles.centeredBody}>Your draft is saved locally.</Text>
+          <Text style={styles.pageTitle}>Receipt ready</Text>
+          <Text style={styles.centeredBody}>Draft saved locally.</Text>
           {message ? <InlineError message={message} /> : null}
           {preparedReceiptId ? (
             <Pressable
@@ -923,7 +927,7 @@ export default function App() {
               onPress={() => runOfflineOcr(preparedReceiptId)}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>Continue text recognition</Text>
+              <Text style={styles.primaryButtonText}>Continue</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -945,11 +949,22 @@ export default function App() {
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.homePage}>
-        <Text style={styles.brand}>RECORA</Text>
-        <Text style={styles.heroTitle}>Receipts, organized locally.</Text>
+      <ScrollView
+        contentContainerStyle={styles.homePage}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.brandRow}>
+          <BrandMark size={86} />
+          <View style={styles.brandCopy}>
+            <Text style={styles.brandName}>RECORA</Text>
+            <Text style={styles.brandTag}>Private receipt organizer</Text>
+          </View>
+        </View>
+
+        <Text style={styles.heroTitle}>Know what you bought.</Text>
         <Text style={styles.bodyText}>
-          Scan, review, and track purchases without uploading your receipts.
+          Turn printed receipts into clean, searchable purchase records—right on
+          your device.
         </Text>
 
         <Pressable
@@ -964,15 +979,21 @@ export default function App() {
           disabled={captureAction !== null}
         >
           <View style={styles.scanIcon}>
-            <Text style={styles.scanIconText}>+</Text>
+            <Ionicons name="camera-outline" size={25} color="#FFFFFF" />
           </View>
           <View style={styles.scanCopy}>
-            <Text style={styles.scanTitle}>
-              {captureAction === 'camera' ? 'Opening camera…' : 'Scan a receipt'}
+            <Text style={styles.scanPrimaryTitle}>
+              {captureAction === 'camera' ? 'Opening camera…' : 'Scan receipt'}
             </Text>
-            <Text style={styles.scanSubtitle}>Camera or photo library</Text>
+            <Text style={styles.scanPrimarySubtitle}>
+              Capture and reconstruct a purchase
+            </Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color="#FFFFFF"
+          />
         </Pressable>
 
         <Pressable
@@ -980,13 +1001,17 @@ export default function App() {
           onPress={() =>
             startCapture('library', importReceiptFromLibrary)
           }
-          style={styles.importButton}
+          style={[
+            styles.importButton,
+            captureAction !== null && styles.disabledButton,
+          ]}
           disabled={captureAction !== null}
         >
+          <Ionicons name="image-outline" size={19} color={colors.primary} />
           <Text style={styles.importButtonText}>
             {captureAction === 'library'
               ? 'Opening photos…'
-              : 'Import receipt photo'}
+              : 'Import from photos'}
           </Text>
         </Pressable>
 
@@ -998,20 +1023,28 @@ export default function App() {
           style={styles.historyCard}
         >
           <View style={styles.historyCardIcon}>
-            <Text style={styles.historyCardIconText}>≡</Text>
+            <Ionicons
+              name="receipt-outline"
+              size={24}
+              color={colors.primaryAlt}
+            />
           </View>
           <View style={styles.scanCopy}>
-            <Text style={styles.scanTitle}>Purchase history</Text>
-            <Text style={styles.scanSubtitle}>
-              Search receipts, items, and price history
+            <Text style={styles.cardTitle}>Purchase history</Text>
+            <Text style={styles.cardSubtitle}>
+              Receipts, items, and price history
             </Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color={colors.textMuted}
+          />
         </Pressable>
 
         {pendingReceipts[0] ? (
           <View style={styles.foundationCard}>
-            <Text style={styles.sectionLabel}>UNFINISHED RECEIPT</Text>
+            <Text style={styles.sectionLabel}>CONTINUE WHERE YOU LEFT OFF</Text>
             <Text style={styles.foundationTitle}>
               {pendingReceipts[0].status === 'review'
                 ? 'Continue receipt review'
@@ -1019,9 +1052,7 @@ export default function App() {
                   ? 'Review reconstructed receipt'
                   : 'Continue receipt processing'}
             </Text>
-            <Text style={styles.foundationText}>
-              Saved locally. Resume where you left off.
-            </Text>
+            <Text style={styles.foundationText}>Draft saved on this device.</Text>
             <Pressable
               accessibilityRole="button"
               onPress={() => resumeReceipt(pendingReceipts[0]!)}
@@ -1044,19 +1075,23 @@ function BootScreen({ state }: { state: BootState }) {
       <View style={styles.centeredPage}>
         {state === 'loading' ? (
           <>
-            <ActivityIndicator />
-            <Text style={styles.bootTitle}>Preparing local storage</Text>
+            <BrandMark size={88} />
+            <ActivityIndicator
+              color={colors.primary}
+              style={styles.processingIndicator}
+            />
+            <Text style={styles.bootTitle}>Opening Recora</Text>
             <Text style={styles.centeredBody}>
-              Recora is applying its private on-device database schema.
+              Preparing your private purchase library.
             </Text>
           </>
         ) : (
           <>
+            <BrandMark size={76} />
             <Text style={styles.errorMark}>!</Text>
-            <Text style={styles.bootTitle}>Storage initialization failed</Text>
+            <Text style={styles.bootTitle}>Recora could not start</Text>
             <Text style={styles.centeredBody}>
-              Recora stopped before creating purchase history. Restart the app and
-              inspect the development logs.
+              Your local data was not changed. Restart the app and try again.
             </Text>
           </>
         )}
@@ -1082,17 +1117,17 @@ function ocrProgressTitle(
 ): string {
   switch (stage) {
     case 'loading-receipt':
-      return 'Opening retained receipt';
+      return 'Preparing receipt';
     case 'recognizing-text':
-      return 'Reading text on this device';
+      return 'Reading receipt';
     case 'redacting-sensitive-data':
-      return 'Protecting sensitive payment text';
+      return 'Protecting sensitive details';
     case 'persisting-evidence':
-      return 'Saving OCR evidence locally';
+      return 'Checking and saving';
     case 'complete':
-      return 'Offline OCR complete';
+      return 'Receipt read';
     default:
-      return 'Preparing offline text recognition';
+      return 'Preparing receipt';
   }
 }
 
@@ -1101,17 +1136,17 @@ function ocrProgressMessage(
 ): string {
   switch (stage) {
     case 'loading-receipt':
-      return 'Recora is loading the private receipt image and validating its retained dimensions.';
+      return 'Getting the image ready.';
     case 'recognizing-text':
-      return 'The bundled Latin OCR model is recognizing text locally. No remote OCR service is used.';
+      return 'Finding the store, items, prices, and total.';
     case 'redacting-sensitive-data':
-      return 'Recora is redacting detected full payment-card numbers before OCR evidence is stored.';
+      return 'Protecting sensitive details before saving.';
     case 'persisting-evidence':
-      return 'Recognized text and geometry are being committed to the local database.';
+      return 'Checking the result and saving it locally.';
     case 'complete':
-      return 'The OCR evidence is stored locally and ready for reconstruction.';
+      return 'Opening your reconstructed receipt.';
     default:
-      return 'Recora is starting the on-device OCR workflow.';
+      return 'Everything stays on this device.';
   }
 }
 
@@ -1126,17 +1161,18 @@ function isAbortError(error: unknown): boolean {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F7F6F2',
+    backgroundColor: colors.background,
   },
   homePage: {
     flexGrow: 1,
-    padding: 24,
-    paddingTop: 40,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 28,
+    paddingBottom: spacing.xxxl,
   },
   page: {
     flexGrow: 1,
-    padding: 24,
-    paddingBottom: 40,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
   },
   centeredPage: {
     flex: 1,
@@ -1144,147 +1180,162 @@ const styles = StyleSheet.create({
     padding: 28,
     alignItems: 'center',
   },
-  brand: {
-    color: '#2D5145',
-    fontSize: 17,
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  brandCopy: {
+    flex: 1,
+  },
+  brandName: {
+    color: colors.primary,
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: 3,
-    marginBottom: 22,
+    letterSpacing: 2.2,
+  },
+  brandTag: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 3,
   },
   heroTitle: {
-    color: '#1F2321',
-    fontSize: 33,
-    fontWeight: '800',
-    lineHeight: 40,
+    color: colors.text,
+    ...typography.hero,
     maxWidth: 520,
   },
   eyebrow: {
-    color: '#3F6B5B',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.8,
+    color: colors.primaryAlt,
+    ...typography.label,
+    letterSpacing: 1.4,
     marginTop: 14,
     marginBottom: 8,
   },
   pageTitle: {
-    color: '#1F2321',
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 34,
+    color: colors.text,
+    ...typography.title,
   },
   bodyText: {
-    color: '#6F756F',
-    fontSize: 15,
-    lineHeight: 23,
-    marginTop: 12,
+    color: colors.textMuted,
+    ...typography.body,
+    marginTop: spacing.md,
+    maxWidth: 520,
   },
   centeredBody: {
-    color: '#6F756F',
-    fontSize: 15,
-    lineHeight: 23,
+    color: colors.textMuted,
+    ...typography.body,
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: spacing.sm,
     maxWidth: 440,
   },
   scanCard: {
-    marginTop: 32,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E1DC',
+    marginTop: 28,
+    backgroundColor: colors.primary,
+    borderRadius: radii.xl,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+    ...shadows.card,
   },
   importButton: {
-    alignSelf: 'flex-start',
-    minHeight: 42,
+    width: '100%',
+    minHeight: 48,
+    flexDirection: 'row',
+    gap: spacing.sm,
     justifyContent: 'center',
-    marginTop: 8,
-    paddingHorizontal: 4,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
   },
   importButtonText: {
-    color: '#3F6B5B',
+    color: colors.primary,
     fontSize: 13,
     fontWeight: '800',
   },
   historyCard: {
-    marginTop: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: '#E2E1DC',
+    borderColor: colors.border,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+    ...shadows.card,
   },
   historyCardIcon: {
     width: 48,
     height: 48,
-    borderRadius: 14,
-    backgroundColor: '#F0ECE2',
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  historyCardIconText: {
-    color: '#6B5B3F',
-    fontSize: 26,
-    fontWeight: '700',
   },
   scanIcon: {
     width: 48,
     height: 48,
-    borderRadius: 14,
-    backgroundColor: '#E6EFEA',
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  scanIconText: {
-    color: '#2D5145',
-    fontSize: 30,
-    fontWeight: '400',
-    marginTop: -2,
   },
   scanCopy: {
     flex: 1,
   },
-  scanTitle: {
-    color: '#1F2321',
+  scanPrimaryTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  scanPrimarySubtitle: {
+    color: 'rgba(255,255,255,0.76)',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  cardTitle: {
+    color: colors.text,
     fontSize: 17,
     fontWeight: '800',
   },
-  scanSubtitle: {
-    color: '#6F756F',
+  cardSubtitle: {
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 3,
   },
   chevron: {
-    color: '#6F756F',
+    color: colors.textMuted,
     fontSize: 28,
   },
   foundationCard: {
-    marginTop: 18,
-    backgroundColor: '#EEF3F0',
-    borderRadius: 18,
+    marginTop: spacing.lg,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radii.lg,
     padding: 18,
+    borderWidth: 1,
+    borderColor: '#CFE0D6',
   },
   sectionLabel: {
-    color: '#3F6B5B',
-    fontSize: 11,
+    color: colors.primaryAlt,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
   },
   foundationTitle: {
-    color: '#1F2321',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '800',
     marginTop: 7,
   },
   foundationText: {
-    color: '#58605B',
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
@@ -1295,8 +1346,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 14,
     paddingHorizontal: 14,
-    borderRadius: 11,
-    backgroundColor: '#3F6B5B',
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
   },
   resumeButtonText: {
     color: '#FFFFFF',
@@ -1306,8 +1357,8 @@ const styles = StyleSheet.create({
   primaryButton: {
     width: '100%',
     minHeight: 54,
-    borderRadius: 14,
-    backgroundColor: '#3F6B5B',
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
     marginTop: 20,
     paddingHorizontal: 18,
     flexDirection: 'row',
@@ -1323,16 +1374,16 @@ const styles = StyleSheet.create({
   secondaryWideButton: {
     width: '100%',
     minHeight: 52,
-    borderRadius: 14,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#BFC5C0',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     marginTop: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryWideButtonText: {
-    color: '#2D5145',
+    color: colors.primary,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -1341,12 +1392,12 @@ const styles = StyleSheet.create({
   },
   errorCard: {
     marginTop: 16,
-    borderRadius: 14,
-    backgroundColor: '#FBECEC',
+    borderRadius: radii.md,
+    backgroundColor: colors.errorSoft,
     padding: 14,
   },
   errorCardText: {
-    color: '#9A3030',
+    color: colors.error,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -1354,24 +1405,27 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#E6EFEA',
+    backgroundColor: colors.successSoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
   },
   successMarkText: {
-    color: '#2D5145',
+    color: colors.success,
     fontSize: 30,
     fontWeight: '900',
   },
+  processingIndicator: {
+    marginTop: spacing.lg,
+  },
   bootTitle: {
-    color: '#1F2321',
+    color: colors.text,
     fontSize: 20,
     fontWeight: '800',
     marginTop: 14,
   },
   errorMark: {
-    color: '#C94A4A',
+    color: colors.error,
     fontSize: 34,
     fontWeight: '900',
   },

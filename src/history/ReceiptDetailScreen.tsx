@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +18,7 @@ import type {
   NormalizedItemOption,
   ReceiptHistoryDetail,
 } from './types';
+import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 
 interface ReceiptDetailScreenProps {
   initialDetail: ReceiptHistoryDetail;
@@ -108,8 +110,8 @@ export function ReceiptDetailScreen({
       setEditingItemId(null);
       setNotice(
         rememberForMerchant
-          ? 'Item organized. Recora will reuse this exact item-name correction for this merchant.'
-          : 'Item organized without creating a merchant learning rule.',
+          ? 'Item organized. Exact matches at this merchant will reuse this name.'
+          : 'Item organized.',
       );
     } catch (cause) {
       setError(messageFromError(cause, 'Could not organize this item.'));
@@ -128,7 +130,7 @@ export function ReceiptDetailScreen({
     try {
       const refreshed = await onUnlinkIdentity(item.lineItemId);
       setDetail(refreshed);
-      setNotice('Organized identity removed. The original receipt description was kept.');
+      setNotice('Organized name removed. Receipt text was kept.');
       if (editingItemId === item.lineItemId) {
         setEditingItemId(null);
       }
@@ -150,11 +152,11 @@ export function ReceiptDetailScreen({
       const removed = await onResetRules();
       setNotice(
         removed === 0
-          ? 'No learned exact-match rules existed for this merchant.'
+          ? 'No remembered matches for this merchant.'
           : 'Removed ' +
               removed +
-              ' learned rule' +
-              (removed === 1 ? '' : 's') +
+              ' remembered match' +
+              (removed === 1 ? '' : 'es') +
               ' for this merchant.',
       );
     } catch (cause) {
@@ -205,16 +207,40 @@ export function ReceiptDetailScreen({
       style={styles.screen}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
     >
       <View style={styles.topRow}>
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
           <Text style={styles.linkText}>‹ History</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>RECEIPT DETAIL</Text>
+        <Text style={styles.eyebrow}>RECEIPT</Text>
       </View>
 
       <Text style={styles.title}>{detail.merchantName || 'Unknown merchant'}</Text>
       <Text style={styles.date}>{formatDate(detail.purchasedAt)}</Text>
+
+      <View style={styles.totalCard}>
+        <View style={styles.totalCopy}>
+          <Text style={styles.totalLabel}>TOTAL</Text>
+          <Text style={styles.totalValue}>
+            {formatMoney(detail.totalMinor, detail.currencyCode)}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.statusPill,
+            detail.validationState === 'verified'
+              ? styles.statusVerified
+              : detail.validationState === 'review'
+                ? styles.statusReview
+                : styles.statusMismatch,
+          ]}
+        >
+          <Text style={styles.statusPillText}>
+            {capitalize(detail.validationState)}
+          </Text>
+        </View>
+      </View>
 
       <View style={styles.summaryCard}>
         <SummaryValue
@@ -222,12 +248,8 @@ export function ReceiptDetailScreen({
           value={formatMoney(detail.subtotalMinor, detail.currencyCode)}
         />
         <SummaryValue
-          label="Final total"
-          value={formatMoney(detail.totalMinor, detail.currencyCode)}
-        />
-        <SummaryValue
-          label="Status"
-          value={capitalize(detail.validationState)}
+          label="Type"
+          value={capitalize(detail.transactionType)}
         />
       </View>
 
@@ -438,7 +460,11 @@ export function ReceiptDetailScreen({
             <Text style={styles.sectionTitle}>Source receipt</Text>
             <Text style={styles.sectionHint}>Read-only original evidence</Text>
           </View>
-          <Text style={styles.chevron}>{showEvidence ? '⌃' : '⌄'}</Text>
+          <Ionicons
+            name={showEvidence ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={colors.textMuted}
+          />
         </Pressable>
 
         {showEvidence ? (
@@ -462,9 +488,9 @@ export function ReceiptDetailScreen({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Merchant learning</Text>
+        <Text style={styles.sectionTitle}>Local corrections</Text>
         <Text style={styles.sectionHint}>
-          Reset remembered exact-name matches. Saved receipt data is unchanged.
+          Reset exact item-name matches remembered for this merchant.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -473,7 +499,7 @@ export function ReceiptDetailScreen({
           style={styles.secondaryWide}
         >
           <Text style={styles.secondaryWideText}>
-            {busy === 'rules' ? 'Resetting…' : 'Reset merchant learning rules'}
+            {busy === 'rules' ? 'Resetting…' : 'Reset remembered matches'}
           </Text>
         </Pressable>
       </View>
@@ -576,69 +602,213 @@ function messageFromError(error: unknown, fallback: string): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F7F6F2' },
-  content: { padding: 20, paddingBottom: 54 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: 54,
+  },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   linkButton: { minHeight: 44, justifyContent: 'center' },
-  linkText: { color: '#3F6B5B', fontSize: 14, fontWeight: '800' },
-  eyebrow: { color: '#3F6B5B', fontSize: 11, fontWeight: '900', letterSpacing: 1.6 },
-  title: { color: '#1F2321', fontSize: 28, fontWeight: '800', lineHeight: 34, marginTop: 10 },
-  date: { color: '#6F756F', fontSize: 13, marginTop: 4 },
-  summaryCard: { marginTop: 18, flexDirection: 'row', gap: 8 },
-  summaryValue: { flex: 1, padding: 12, borderRadius: 13, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E1DC' },
-  summaryLabel: { color: '#777D78', fontSize: 10, fontWeight: '800' },
-  summaryText: { color: '#1F2321', fontSize: 13, fontWeight: '900', marginTop: 4 },
-  section: { marginTop: 16, padding: 16, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E1DC' },
-  sectionTitle: { color: '#1F2321', fontSize: 16, fontWeight: '900' },
-  sectionHint: { color: '#757B76', fontSize: 12, lineHeight: 18, marginTop: 3 },
-  itemCard: { marginTop: 12, padding: 13, borderRadius: 13, backgroundColor: '#FCFCFA', borderWidth: 1, borderColor: '#E5E6E2' },
+  linkText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
+  eyebrow: {
+    color: colors.primaryAlt,
+    ...typography.label,
+    letterSpacing: 1.4,
+  },
+  title: {
+    color: colors.text,
+    ...typography.title,
+    marginTop: spacing.sm,
+  },
+  date: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
+  totalCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.xl,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...shadows.card,
+  },
+  totalCopy: { flex: 1 },
+  totalLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  totalValue: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+  },
+  statusVerified: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  statusReview: { backgroundColor: 'rgba(217,154,62,0.5)' },
+  statusMismatch: { backgroundColor: 'rgba(201,74,74,0.58)' },
+  statusPillText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  summaryCard: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.sm },
+  summaryValue: {
+    flex: 1,
+    padding: 12,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
+  summaryText: { color: colors.text, fontSize: 13, fontWeight: '900', marginTop: 4 },
+  section: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sectionTitle: { color: colors.text, ...typography.section },
+  sectionHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  itemCard: {
+    marginTop: 12,
+    padding: 13,
+    borderRadius: radii.md,
+    backgroundColor: '#FBFCFA',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   itemHeader: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   itemCopy: { flex: 1 },
-  itemTitle: { color: '#1F2321', fontSize: 14, fontWeight: '900' },
-  rawName: { color: '#777D78', fontSize: 11, marginTop: 2 },
-  itemMeta: { color: '#6B716C', fontSize: 11, lineHeight: 16, marginTop: 4 },
-  categoryTag: { alignSelf: 'flex-start', marginTop: 6, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, backgroundColor: '#EEF3F0', color: '#3F6B5B', fontSize: 10, fontWeight: '800' },
-  lineMoney: { color: '#1F2321', fontSize: 13, fontWeight: '900' },
+  itemTitle: { color: colors.text, fontSize: 14, fontWeight: '900' },
+  rawName: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  itemMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  categoryTag: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  lineMoney: { color: colors.text, fontSize: 13, fontWeight: '900' },
   itemActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
   textButton: { paddingVertical: 5 },
-  textButtonText: { color: '#3F6B5B', fontSize: 11, fontWeight: '900' },
-  removeText: { color: '#9A3030', fontSize: 11, fontWeight: '900' },
+  textButtonText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
+  removeText: { color: colors.error, fontSize: 11, fontWeight: '900' },
   organizeCard: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E3E5E1' },
-  organizeTitle: { color: '#1F2321', fontSize: 13, fontWeight: '900' },
-  organizeHint: { color: '#747A75', fontSize: 11, lineHeight: 17, marginTop: 3, marginBottom: 9 },
-  textInput: { minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: '#CFD3CF', backgroundColor: '#FFFFFF', paddingHorizontal: 11, color: '#1F2321', fontSize: 13 },
+  organizeTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  organizeHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 3,
+    marginBottom: 9,
+  },
+  textInput: {
+    minHeight: 46,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.background,
+    paddingHorizontal: 11,
+    color: colors.text,
+    fontSize: 13,
+  },
   suggestions: { marginTop: 8 },
   fieldLabel: { color: '#454A46', fontSize: 10, fontWeight: '900', marginTop: 10, marginBottom: 5 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 9, borderRadius: 999, borderWidth: 1, borderColor: '#CCD0CC', backgroundColor: '#FFFFFF' },
-  chipSelected: { backgroundColor: '#E6EFEA', borderColor: '#739688' },
-  chipText: { color: '#5D635E', fontSize: 10, fontWeight: '700' },
-  chipTextSelected: { color: '#2D5145', fontWeight: '900' },
+  chipSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  chipText: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  chipTextSelected: { color: colors.primary, fontWeight: '900' },
   rememberRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginTop: 12 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#A0A69F', alignItems: 'center', justifyContent: 'center' },
-  checkboxChecked: { backgroundColor: '#3F6B5B', borderColor: '#3F6B5B' },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkboxText: { color: '#FFFFFF', fontWeight: '900' },
   rememberText: { flex: 1, color: '#474C48', fontSize: 11, lineHeight: 17 },
   learningHint: { color: '#818681', fontSize: 10, lineHeight: 15, marginTop: 5, marginLeft: 31 },
   organizeActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  primarySmall: { minHeight: 40, borderRadius: 10, paddingHorizontal: 13, backgroundColor: '#3F6B5B', flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' },
+  primarySmall: {
+    minHeight: 40,
+    borderRadius: radii.sm,
+    paddingHorizontal: 13,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   primarySmallText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
-  secondarySmall: { minHeight: 40, borderRadius: 10, paddingHorizontal: 13, borderWidth: 1, borderColor: '#C6CBC7', justifyContent: 'center' },
-  secondarySmallText: { color: '#3F6B5B', fontSize: 11, fontWeight: '900' },
+  secondarySmall: {
+    minHeight: 40,
+    borderRadius: radii.sm,
+    paddingHorizontal: 13,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    justifyContent: 'center',
+  },
+  secondarySmallText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
   adjustmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#ECEDE9' },
-  adjustmentLabel: { color: '#1F2321', fontSize: 13, fontWeight: '800' },
+  adjustmentLabel: { color: colors.text, fontSize: 13, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
-  chevron: { color: '#777D78', fontSize: 22 },
+  chevron: { color: colors.textMuted, fontSize: 22 },
   receiptImage: { width: '100%', height: 360, marginTop: 14, borderRadius: 12, backgroundColor: '#ECEDE9' },
-  ocrLabel: { color: '#3F6B5B', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 14 },
+  ocrLabel: {
+    color: colors.primaryAlt,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    marginTop: 14,
+  },
   ocrText: { color: '#303431', fontFamily: 'monospace', fontSize: 11, lineHeight: 17, marginTop: 7 },
   emptyText: { color: '#777D78', fontSize: 12, marginTop: 10 },
-  secondaryWide: { minHeight: 46, borderRadius: 11, borderWidth: 1, borderColor: '#C6CBC7', marginTop: 12, justifyContent: 'center', alignItems: 'center' },
-  secondaryWideText: { color: '#3F6B5B', fontSize: 12, fontWeight: '900' },
-  noticeBox: { marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: '#E6EFEA' },
-  noticeText: { color: '#2D5145', fontSize: 12, lineHeight: 18 },
-  errorBox: { marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: '#FBECEC' },
-  errorText: { color: '#9A3030', fontSize: 12, lineHeight: 18 },
+  secondaryWide: {
+    minHeight: 46,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    marginTop: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryWideText: { color: colors.primary, fontSize: 12, fontWeight: '900' },
+  noticeBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: radii.md,
+    backgroundColor: colors.successSoft,
+  },
+  noticeText: { color: colors.success, fontSize: 12, lineHeight: 18 },
+  errorBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: radii.md,
+    backgroundColor: colors.errorSoft,
+  },
+  errorText: { color: colors.error, fontSize: 12, lineHeight: 18 },
   deleteButton: { alignSelf: 'center', marginTop: 20, padding: 10 },
-  deleteText: { color: '#9A3030', fontSize: 12, fontWeight: '900' },
+  deleteText: { color: colors.error, fontSize: 12, fontWeight: '900' },
 });
