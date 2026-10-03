@@ -56,6 +56,7 @@ export interface ReceiptHistoryDetail {
   transactionType: TransactionType;
   validationState: ValidationState;
   imageUri: string | null;
+  imageUris: string[];
   rawOcrText: string | null;
   items: HistoryLineItem[];
   adjustments: HistoryAdjustment[];

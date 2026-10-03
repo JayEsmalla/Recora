@@ -337,7 +337,7 @@ Exit gate:
 - PDF/CSV export
 - encrypted manual backup/restore
 - advanced charts
-- multi-receipt batch capture
+- multi-receipt batch capture (multiple separate receipts in one batch; this is distinct from the supported 1–5 photos for one long receipt)
 - user-defined tagging
 - more sophisticated product aliasing
 - optional multilingual receipt support

@@ -160,7 +160,7 @@ export class HistoryRepository {
       return null;
     }
 
-    const [items, adjustments] = await Promise.all([
+    const [items, adjustments, pageRows] = await Promise.all([
       this.database.all<HistoryLineItemRow>(
         [
           'SELECT',
@@ -194,6 +194,15 @@ export class HistoryRepository {
         ].join('\n'),
         [receiptId],
       ),
+      this.database.all<{ image_uri: string }>(
+        [
+          'SELECT image_uri',
+          'FROM receipt_pages',
+          'WHERE receipt_id = ?',
+          'ORDER BY position ASC;',
+        ].join('\n'),
+        [receiptId],
+      ),
     ]);
 
     return {
@@ -206,6 +215,12 @@ export class HistoryRepository {
       transactionType: receipt.transaction_type,
       validationState: receipt.validation_state,
       imageUri: receipt.image_uri,
+      imageUris:
+        pageRows.length > 0
+          ? pageRows.map((page) => page.image_uri)
+          : receipt.image_uri
+            ? [receipt.image_uri]
+            : [],
       rawOcrText: receipt.raw_ocr_text,
       items: items.map(mapHistoryLineItem),
       adjustments: adjustments.map(mapAdjustment),
@@ -704,11 +719,20 @@ export class HistoryRepository {
     return rows.map(mapLineContext);
   }
 
-  async deleteAcceptedReceipt(receiptId: string): Promise<string | null> {
-    const receipt = await this.database.first<{ image_uri: string | null }>(
-      "SELECT image_uri FROM receipts WHERE id = ? AND status = 'accepted';",
-      [receiptId],
-    );
+  async deleteAcceptedReceipt(receiptId: string): Promise<string[] | null> {
+    const [receipt, pageRows] = await Promise.all([
+      this.database.first<{ image_uri: string | null }>(
+        "SELECT image_uri FROM receipts WHERE id = ? AND status = 'accepted';",
+        [receiptId],
+      ),
+      this.database.all<{ image_uri: string }>(
+        `SELECT image_uri
+         FROM receipt_pages
+         WHERE receipt_id = ?
+         ORDER BY position ASC;`,
+        [receiptId],
+      ),
+    ]);
 
     if (!receipt) {
       return null;
@@ -719,7 +743,11 @@ export class HistoryRepository {
       [receiptId],
     );
 
-    return receipt.image_uri;
+    return pageRows.length > 0
+      ? pageRows.map((page) => page.image_uri)
+      : receipt.image_uri
+        ? [receipt.image_uri]
+        : [];
   }
 }
 

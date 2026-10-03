@@ -20,9 +20,9 @@ A printed receipt can contain useful purchase information, but it is difficult t
 
 Typical use:
 
-1. Take a photo of a printed receipt or import one from the photo library.
-2. Crop and rotate the receipt if needed.
-3. Run OCR directly on the device.
+1. Take 1–5 ordered photos of a printed receipt, or import up to 5 photos from the photo library.
+2. Crop and rotate each receipt section if needed.
+3. Run OCR directly on the device; long receipts are read one photo at a time and reconstructed as one receipt.
 4. Reconstruct the merchant, date, items, quantities, prices, discounts, taxes, charges, subtotal, and total.
 5. Check arithmetic and confidence warnings.
 6. Correct uncertain fields before saving.
@@ -55,8 +55,9 @@ OCR is only one stage of the system. Recora's main value is the combination of *
 
 ### Receipt capture and preparation
 
-- Camera capture
-- Photo-library import
+- Camera capture with up to 5 ordered photos per receipt
+- Multi-photo library import with up to 5 images per receipt
+- Sequential page preparation for long sari-sari store and thermal receipts
 - Manual four-corner crop
 - Left/right rotation
 - Orientation-safe image processing
@@ -70,6 +71,9 @@ OCR is only one stage of the system. Recora's main value is the combination of *
 - Core OCR workflow does not require a remote OCR service
 - Raw OCR text is preserved as evidence
 - Spatial OCR observations are retained for reconstruction
+- Multi-photo receipts are OCRed page-by-page to bound memory, then combined into one ordered virtual receipt document
+- All original receipt photos remain available as read-only evidence
+- Exact duplicate-looking item rows across receipt photos are flagged for review instead of being deleted automatically
 - OCR can be cancelled and retried safely
 - Full payment-card numbers detected in OCR output are redacted before persistence
 

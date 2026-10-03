@@ -147,6 +147,26 @@ describe('parseReceipt', () => {
     );
   });
 
+  it('calls out duplicate-looking rows that cross receipt photos', () => {
+    const document = makeDocument([
+      'STORE',
+      '2026-10-13',
+      'SOAP 50.00',
+      'SOAP 50.00',
+      'TOTAL 100.00',
+    ]);
+    document.blocks[0]!.lines[2]!.id = 'page-1::line-2';
+    document.blocks[0]!.lines[3]!.id = 'page-2::line-3';
+
+    const candidate = parseReceipt(document);
+    const warning = candidate.warnings.find(
+      (item) => item.code === 'possible-duplicate-line',
+    );
+
+    expect(warning?.message).toContain('more than one receipt photo');
+    expect(warning?.message).toContain('photo overlap');
+  });
+
   it('does not misread total item count as the final monetary total', () => {
     const candidate = parseReceipt(
       makeDocument([

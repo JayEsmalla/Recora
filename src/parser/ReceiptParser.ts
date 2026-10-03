@@ -377,9 +377,18 @@ function parseLineItems(
 
     if (duplicate) {
       parsed.possibleDuplicateOf = duplicate.id;
+      const duplicatePage = observationPage(duplicate.observationIds);
+      const currentPage = observationPage(parsed.observationIds);
+      const crossesReceiptPhotos =
+        duplicatePage !== null &&
+        currentPage !== null &&
+        duplicatePage !== currentPage;
+
       warnings.push({
         code: 'possible-duplicate-line',
-        message: `"${parsed.rawName}" appears more than once with the same amount.`,
+        message: crossesReceiptPhotos
+          ? `"${parsed.rawName}" appears with the same amount in more than one receipt photo. Check for photo overlap and keep the correct row.`
+          : `"${parsed.rawName}" appears more than once with the same amount.`,
         observationIds: parsed.observationIds,
       });
     } else {
@@ -527,6 +536,16 @@ function isSummaryText(text: string): boolean {
 
 function parseDateLike(text: string): boolean {
   return /\b\d{1,4}[\/-]\d{1,2}[\/-]\d{1,4}\b/.test(text);
+}
+
+function observationPage(observationIds: readonly string[]): number | null {
+  for (const id of observationIds) {
+    const match = /^page-(\d+)::/.exec(id);
+    if (match?.[1]) {
+      return Number(match[1]);
+    }
+  }
+  return null;
 }
 
 function normalizeItemKey(text: string): string {

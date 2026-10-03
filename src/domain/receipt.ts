@@ -29,6 +29,16 @@ export interface Receipt {
   updatedAt: string;
 }
 
+export interface ReceiptPage {
+  id: string;
+  receiptId: string;
+  position: number;
+  imageUri: string;
+  imageWidth: number;
+  imageHeight: number;
+  createdAt: string;
+}
+
 export interface LineItem {
   id: string;
   receiptId: string;

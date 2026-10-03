@@ -121,6 +121,7 @@ describe('HistoryRepository', () => {
         receiptId: 'receipt-old',
         merchantName: 'Alpha Market',
         imageUri: 'file:///receipt-old.jpg',
+        imageUris: ['file:///receipt-old.jpg'],
         rawOcrText: 'RAW receipt-old',
       }),
     );
@@ -158,9 +159,9 @@ describe('HistoryRepository', () => {
   });
 
   it('deleting an accepted receipt removes its contribution from search and history', async () => {
-    expect(await history.deleteAcceptedReceipt('receipt-new')).toBe(
+    expect(await history.deleteAcceptedReceipt('receipt-new')).toEqual([
       'file:///receipt-new.jpg',
-    );
+    ]);
 
     expect(await history.getReceiptDetail('receipt-new')).toBeNull();
     expect(

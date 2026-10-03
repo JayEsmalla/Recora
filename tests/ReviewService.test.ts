@@ -53,6 +53,9 @@ describe('ReviewService', () => {
     const session = await service.load('receipt-1', now);
 
     expect(session.receipt.status).toBe('review');
+    expect(session.sourceImageUris).toEqual([
+      'file:///private/receipt-1.jpg',
+    ]);
     expect(session.draft.items[0]?.id).toBe('receipt-1-item-0');
     expect(session.rawOcrText).toContain('TOTAL 85.00');
 
@@ -141,12 +144,19 @@ describe('ReviewService', () => {
     expect(stored?.receipt.rawOcrText).toBe(fixtureDocument().rawText);
   });
 
-  it('returns the private image URI when discarding an unfinished receipt', async () => {
-    await service.load('receipt-1', now);
+  it('returns all private image URIs when discarding an unfinished receipt', async () => {
+    await receipts.addPage({
+      receiptId: 'receipt-1',
+      imageUri: 'file:///private/receipt-1-page-2.jpg',
+      imageWidth: 1000,
+      imageHeight: 1600,
+      now: timestamp,
+    });
 
-    expect(await service.discard('receipt-1')).toBe(
+    expect(await service.discard('receipt-1')).toEqual([
       'file:///private/receipt-1.jpg',
-    );
+      'file:///private/receipt-1-page-2.jpg',
+    ]);
     expect(await receipts.getById('receipt-1')).toBeNull();
     expect(await ocr.getForReceipt('receipt-1')).toBeNull();
   });

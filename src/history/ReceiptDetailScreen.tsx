@@ -174,7 +174,7 @@ export function ReceiptDetailScreen({
 
     Alert.alert(
       'Delete this receipt?',
-      'This removes the saved receipt, its item history contribution, OCR evidence, and retained image from this device. This cannot be undone.',
+      'This removes the saved receipt, its item history contribution, OCR evidence, and all retained receipt photos from this device. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -471,13 +471,26 @@ export function ReceiptDetailScreen({
 
         {showEvidence ? (
           <>
-            {detail.imageUri ? (
-              <Image
-                accessibilityLabel="Original receipt image"
-                source={{ uri: detail.imageUri }}
-                resizeMode="contain"
-                style={styles.receiptImage}
-              />
+            {detail.imageUris.length > 0 ? (
+              detail.imageUris.map((imageUri, index) => (
+                <View key={imageUri} style={styles.evidencePage}>
+                  {detail.imageUris.length > 1 ? (
+                    <Text style={styles.evidencePageLabel}>
+                      PHOTO {index + 1} OF {detail.imageUris.length}
+                    </Text>
+                  ) : null}
+                  <Image
+                    accessibilityLabel={
+                      detail.imageUris.length > 1
+                        ? `Original receipt photo ${index + 1} of ${detail.imageUris.length}`
+                        : 'Original receipt image'
+                    }
+                    source={{ uri: imageUri }}
+                    resizeMode="contain"
+                    style={styles.receiptImage}
+                  />
+                </View>
+              ))
             ) : (
               <Text style={styles.emptyText}>Receipt image is unavailable.</Text>
             )}
@@ -794,7 +807,20 @@ const styles = StyleSheet.create({
   adjustmentLabel: { color: colors.text, fontSize: 13, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
   chevron: { color: colors.textMuted, fontSize: 22 },
-  receiptImage: { width: '100%', height: 360, marginTop: 14, borderRadius: 12, backgroundColor: '#ECEDE9' },
+  evidencePage: { marginTop: 14 },
+  evidencePageLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  receiptImage: {
+    width: '100%',
+    height: 360,
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: '#ECEDE9',
+  },
   ocrLabel: {
     color: colors.primaryAlt,
     fontSize: 10,

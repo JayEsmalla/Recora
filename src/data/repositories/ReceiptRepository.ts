@@ -1,6 +1,7 @@
 import type {
   AdjustmentKind,
   Receipt,
+  ReceiptPage,
   ReceiptStatus,
   TransactionType,
   ValidationState,
@@ -27,6 +28,14 @@ export interface CreateReceiptDraftInput {
   imageWidth?: number | null;
   imageHeight?: number | null;
   rawOcrText?: string | null;
+  now: string;
+}
+
+export interface AddReceiptPageInput {
+  receiptId: string;
+  imageUri: string;
+  imageWidth: number;
+  imageHeight: number;
   now: string;
 }
 
@@ -106,26 +115,48 @@ export class ReceiptRepository {
   constructor(private readonly database: DatabaseConnection) {}
 
   async createDraft(input: CreateReceiptDraftInput): Promise<void> {
-    await this.database.run(
-      `INSERT INTO receipts (
-        id, merchant_raw_name, purchased_at, currency_code, transaction_type,
-        status, validation_state, image_uri, image_width, image_height,
-        raw_ocr_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'draft', 'review', ?, ?, ?, ?, ?, ?);`,
-      [
-        input.id,
-        input.merchantRawName ?? null,
-        input.purchasedAt ?? null,
-        input.currencyCode ?? 'PHP',
-        input.transactionType ?? 'purchase',
-        input.imageUri ?? null,
-        input.imageWidth ?? null,
-        input.imageHeight ?? null,
-        input.rawOcrText ?? null,
-        input.now,
-        input.now,
-      ],
-    );
+    await this.database.transaction(async (transaction) => {
+      await transaction.run(
+        `INSERT INTO receipts (
+          id, merchant_raw_name, purchased_at, currency_code, transaction_type,
+          status, validation_state, image_uri, image_width, image_height,
+          raw_ocr_text, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'draft', 'review', ?, ?, ?, ?, ?, ?);`,
+        [
+          input.id,
+          input.merchantRawName ?? null,
+          input.purchasedAt ?? null,
+          input.currencyCode ?? 'PHP',
+          input.transactionType ?? 'purchase',
+          input.imageUri ?? null,
+          input.imageWidth ?? null,
+          input.imageHeight ?? null,
+          input.rawOcrText ?? null,
+          input.now,
+          input.now,
+        ],
+      );
+
+      if (
+        input.imageUri &&
+        input.imageWidth &&
+        input.imageHeight
+      ) {
+        await transaction.run(
+          `INSERT INTO receipt_pages (
+            id, receipt_id, position, image_uri, image_width, image_height, created_at
+          ) VALUES (?, ?, 0, ?, ?, ?, ?);`,
+          [
+            pageId(input.id, 0),
+            input.id,
+            input.imageUri,
+            input.imageWidth,
+            input.imageHeight,
+            input.now,
+          ],
+        );
+      }
+    });
   }
 
   async getById(id: string): Promise<Receipt | null> {
@@ -134,6 +165,81 @@ export class ReceiptRepository {
       [id],
     );
     return row ? mapReceipt(row) : null;
+  }
+
+  async listPages(receiptId: string): Promise<ReceiptPage[]> {
+    const rows = await this.database.all<ReceiptPageRow>(
+      `SELECT *
+       FROM receipt_pages
+       WHERE receipt_id = ?
+       ORDER BY position ASC;`,
+      [receiptId],
+    );
+    return rows.map(mapReceiptPage);
+  }
+
+  async addPage(input: AddReceiptPageInput): Promise<ReceiptPage> {
+    return this.database.transaction(async (transaction) => {
+      const receipt = await transaction.first<{ status: ReceiptStatus }>(
+        'SELECT status FROM receipts WHERE id = ?;',
+        [input.receiptId],
+      );
+
+      if (!receipt) {
+        throw new Error(`Receipt not found: ${input.receiptId}`);
+      }
+      if (receipt.status !== 'draft' && receipt.status !== 'processing') {
+        throw new Error('Pages can only be added before receipt review begins.');
+      }
+
+      const countRow = await transaction.first<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM receipt_pages WHERE receipt_id = ?;',
+        [input.receiptId],
+      );
+      const position = Number(countRow?.count ?? 0);
+
+      if (position >= 5) {
+        throw new Error('A receipt can contain at most 5 photos.');
+      }
+
+      const id = pageId(input.receiptId, position);
+      await transaction.run(
+        `INSERT INTO receipt_pages (
+          id, receipt_id, position, image_uri, image_width, image_height, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [
+          id,
+          input.receiptId,
+          position,
+          input.imageUri,
+          input.imageWidth,
+          input.imageHeight,
+          input.now,
+        ],
+      );
+
+      // Adding a page changes the OCR source set. Any earlier OCR evidence is
+      // now stale and must be regenerated from all pages before review.
+      await transaction.run('DELETE FROM ocr_runs WHERE receipt_id = ?;', [
+        input.receiptId,
+      ]);
+      await transaction.run(
+        `UPDATE receipts
+         SET raw_ocr_text = NULL, status = 'draft', updated_at = ?
+         WHERE id = ?;`,
+        [input.now, input.receiptId],
+      );
+
+      return {
+        id,
+        receiptId: input.receiptId,
+        position,
+        imageUri: input.imageUri,
+        imageWidth: input.imageWidth,
+        imageHeight: input.imageHeight,
+        createdAt: input.now,
+      };
+    });
   }
 
   async getReviewData(id: string): Promise<StoredReceiptReview | null> {
@@ -173,9 +279,25 @@ export class ReceiptRepository {
   async listImageUris(): Promise<string[]> {
     const rows = await this.database.all<{ image_uri: string }>(
       `SELECT image_uri
-       FROM receipts
-       WHERE image_uri IS NOT NULL
-       ORDER BY created_at ASC;`,
+       FROM receipt_pages
+       UNION
+       SELECT r.image_uri
+       FROM receipts r
+       WHERE r.image_uri IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM receipt_pages rp WHERE rp.receipt_id = r.id
+         );`,
+    );
+    return rows.map((row) => row.image_uri);
+  }
+
+  async listReceiptImageUris(receiptId: string): Promise<string[]> {
+    const rows = await this.database.all<{ image_uri: string }>(
+      `SELECT image_uri
+       FROM receipt_pages
+       WHERE receipt_id = ?
+       ORDER BY position ASC;`,
+      [receiptId],
     );
     return rows.map((row) => row.image_uri);
   }
@@ -426,6 +548,16 @@ interface ReceiptRow {
   updated_at: string;
 }
 
+interface ReceiptPageRow {
+  id: string;
+  receipt_id: string;
+  position: number;
+  image_uri: string;
+  image_width: number;
+  image_height: number;
+  created_at: string;
+}
+
 interface LineItemRow {
   id: string;
   receipt_id: string;
@@ -473,6 +605,22 @@ function mapReceipt(row: ReceiptRow): Receipt {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function mapReceiptPage(row: ReceiptPageRow): ReceiptPage {
+  return {
+    id: row.id,
+    receiptId: row.receipt_id,
+    position: row.position,
+    imageUri: row.image_uri,
+    imageWidth: row.image_width,
+    imageHeight: row.image_height,
+    createdAt: row.created_at,
+  };
+}
+
+function pageId(receiptId: string, position: number): string {
+  return `page-${receiptId}-${position}`;
 }
 
 function mapLineItem(row: LineItemRow): StoredLineItem {

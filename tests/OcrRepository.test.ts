@@ -84,6 +84,23 @@ describe('OcrRepository', () => {
     database.close();
   });
 
+  it('invalidates stale OCR evidence when another receipt photo is added', async () => {
+    await ocr.replaceForReceipt('receipt-1', document, now);
+
+    await receipts.addPage({
+      receiptId: 'receipt-1',
+      imageUri: 'file:///private/receipt-1-page-2.jpg',
+      imageWidth: 1000,
+      imageHeight: 2000,
+      now,
+    });
+
+    expect(await ocr.getForReceipt('receipt-1')).toBeNull();
+    const receipt = await receipts.getById('receipt-1');
+    expect(receipt?.rawOcrText).toBeNull();
+    expect(receipt?.status).toBe('draft');
+  });
+
   it('persists raw OCR and spatial observations transactionally', async () => {
     const stored = await ocr.replaceForReceipt('receipt-1', document, now);
 

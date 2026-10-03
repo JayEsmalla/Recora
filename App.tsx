@@ -14,6 +14,7 @@ import {
 import {
   captureReceiptWithCamera,
   importReceiptFromLibrary,
+  MAX_RECEIPT_PHOTOS,
   recoverPendingImagePickerResult,
   type CaptureResult,
 } from './src/capture/CaptureService';
@@ -91,6 +92,8 @@ export default function App() {
   const [bootState, setBootState] = useState<BootState>('loading');
   const [screen, setScreen] = useState<AppScreen>('home');
   const [source, setSource] = useState<ReceiptImageSource | null>(null);
+  const [queuedSources, setQueuedSources] = useState<ReceiptImageSource[]>([]);
+  const [preparedPageCount, setPreparedPageCount] = useState(0);
   const [captureAction, setCaptureAction] = useState<
     'camera' | 'library' | null
   >(null);
@@ -159,7 +162,10 @@ export default function App() {
           recoveryAttempted.current = true;
           const recovered = await recoverPendingImagePickerResult();
           if (mounted && recovered?.status === 'captured') {
-            setSource(recovered.image);
+            setPreparedReceiptId(null);
+            setPreparedPageCount(0);
+            setSource(recovered.images[0] ?? null);
+            setQueuedSources(recovered.images.slice(1));
             setScreen('editing');
           }
         }
@@ -187,13 +193,33 @@ export default function App() {
       return;
     }
 
+    if (screen === 'home') {
+      setPreparedReceiptId(null);
+      setPreparedPageCount(0);
+      setQueuedSources([]);
+    }
+
     setCaptureAction(sourceKind);
     setMessage(null);
     try {
       const result = await action();
 
       if (result.status === 'captured') {
-        setSource(result.image);
+        const remaining = MAX_RECEIPT_PHOTOS - preparedPageCount;
+
+        if (result.images.length > remaining) {
+          for (const image of result.images) {
+            removePrivateReceiptImage(image.uri);
+          }
+          setMessage(
+            `One receipt can contain up to ${MAX_RECEIPT_PHOTOS} photos. ` +
+              `You can add ${remaining} more.`,
+          );
+          return;
+        }
+
+        setSource(result.images[0] ?? null);
+        setQueuedSources(result.images.slice(1));
         setScreen('editing');
         return;
       }
@@ -201,12 +227,12 @@ export default function App() {
       if (result.status === 'permission-denied') {
         setMessage(
           result.source === 'camera'
-            ? 'Camera permission is required to photograph a receipt. You can still import an existing image.'
-            : 'Photo access is required to import a receipt image.',
+            ? 'Camera permission is required to photograph a receipt. You can still import existing photos.'
+            : 'Photo access is required to import receipt images.',
         );
       }
     } catch (error) {
-      setMessage(messageFromError(error, 'Recora could not open this receipt image.'));
+      setMessage(messageFromError(error, 'Recora could not open these receipt photos.'));
     } finally {
       setCaptureAction(null);
     }
@@ -216,44 +242,79 @@ export default function App() {
     if (source) {
       removePrivateReceiptImage(source.uri);
     }
+    for (const queued of queuedSources) {
+      removePrivateReceiptImage(queued.uri);
+    }
+
     setSource(null);
+    setQueuedSources([]);
     setMessage(null);
-    setScreen('home');
+    setScreen(preparedReceiptId ? 'prepared' : 'home');
   }
 
-  async function savePreparedDraft(image: PreparedReceiptImage) {
-    const receiptId = createReceiptId();
+  async function savePreparedPage(image: PreparedReceiptImage) {
+    const receiptId = preparedReceiptId ?? createReceiptId();
     let retained: PreparedReceiptImage | null = null;
 
     try {
-      retained = await retainPreparedReceiptImage(image, receiptId);
       const database = await openRecoraDatabase();
       const repository = new ReceiptRepository(database);
-      const now = new Date().toISOString();
+      const existingPages = preparedReceiptId
+        ? await repository.listPages(receiptId)
+        : [];
+      const pagePosition = existingPages.length;
 
-      await repository.createDraft({
-        id: receiptId,
-        imageUri: retained.uri,
-        imageWidth: retained.width,
-        imageHeight: retained.height,
-        now,
-      });
-
-      if (source) {
-        removePrivateReceiptImage(source.uri);
+      if (pagePosition >= MAX_RECEIPT_PHOTOS) {
+        throw new Error(
+          `A receipt can contain at most ${MAX_RECEIPT_PHOTOS} photos.`,
+        );
       }
 
-      setSource(null);
+      retained = await retainPreparedReceiptImage(
+        image,
+        receiptId,
+        pagePosition,
+      );
+      const now = new Date().toISOString();
+
+      if (pagePosition === 0) {
+        await repository.createDraft({
+          id: receiptId,
+          imageUri: retained.uri,
+          imageWidth: retained.width,
+          imageHeight: retained.height,
+          now,
+        });
+      } else {
+        await repository.addPage({
+          receiptId,
+          imageUri: retained.uri,
+          imageWidth: retained.width,
+          imageHeight: retained.height,
+          now,
+        });
+      }
+
+      const nextPageCount = pagePosition + 1;
+      const [nextSource, ...remainingQueue] = queuedSources;
+
       setPreparedReceiptId(receiptId);
+      setPreparedPageCount(nextPageCount);
       setOcrError(null);
       setMessage(null);
+      setQueuedSources(remainingQueue);
 
-      // The user already approved the prepared image. Start OCR immediately
-      // instead of inserting a redundant confirmation screen and extra tap.
       void refreshPendingReceipts().catch((error) => {
         console.warn('Could not refresh unfinished receipts after capture.', error);
       });
-      void runOfflineOcr(receiptId);
+
+      if (nextSource) {
+        setSource(nextSource);
+        setScreen('editing');
+      } else {
+        setSource(null);
+        setScreen('prepared');
+      }
     } catch (error) {
       if (retained) {
         removePrivateReceiptImage(retained.uri);
@@ -517,8 +578,8 @@ export default function App() {
     }
 
     const service = await createHistoryService();
-    const imageUri = await service.deleteReceipt(receiptDetail.receiptId);
-    if (imageUri) {
+    const imageUris = await service.deleteReceipt(receiptDetail.receiptId);
+    for (const imageUri of imageUris ?? []) {
       removePrivateReceiptImage(imageUri);
     }
 
@@ -597,6 +658,7 @@ export default function App() {
 
     setReviewSession(null);
     setPreparedReceiptId(null);
+    setPreparedPageCount(0);
     setHistoryOverview(null);
     setScreen('saved');
 
@@ -623,13 +685,14 @@ export default function App() {
     }
 
     const service = await createReviewService();
-    const imageUri = await service.discard(receiptId);
-    if (imageUri) {
+    const imageUris = await service.discard(receiptId);
+    for (const imageUri of imageUris ?? []) {
       removePrivateReceiptImage(imageUri);
     }
 
     setReviewSession(null);
     setPreparedReceiptId(null);
+    setPreparedPageCount(0);
     setMessage(null);
     setScreen('home');
     void refreshPendingReceipts().catch((error) => {
@@ -648,6 +711,9 @@ export default function App() {
       return;
     }
 
+    const database = await openRecoraDatabase();
+    const repository = new ReceiptRepository(database);
+    setPreparedPageCount((await repository.listPages(receipt.id)).length);
     setScreen('prepared');
   }
 
@@ -660,9 +726,14 @@ export default function App() {
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
         <ReceiptImageEditor
+          key={source.uri}
           source={source}
+          pageNumber={preparedPageCount + 1}
+          totalPages={
+            preparedPageCount + 1 + queuedSources.length
+          }
           onCancel={cancelEditing}
-          onReady={savePreparedDraft}
+          onReady={savePreparedPage}
         />
       </SafeAreaView>
     );
@@ -692,7 +763,12 @@ export default function App() {
           onSaveDraft={saveReviewDraft}
           onAccept={acceptReviewedReceipt}
           onDiscard={discardReviewedReceipt}
-          onBack={() => setScreen('home')}
+          onBack={() => {
+            setReviewSession(null);
+            setPreparedReceiptId(null);
+            setPreparedPageCount(0);
+            setScreen('home');
+          }}
         />
       </SafeAreaView>
     );
@@ -860,10 +936,10 @@ export default function App() {
             style={styles.processingIndicator}
           />
           <Text style={styles.bootTitle}>
-            {ocrProgressTitle(ocrProgress?.stage)}
+            {ocrProgressTitle(ocrProgress)}
           </Text>
           <Text style={styles.centeredBody}>
-            {ocrProgressMessage(ocrProgress?.stage)}
+            {ocrProgressMessage(ocrProgress)}
           </Text>
 
           <Pressable
@@ -911,35 +987,100 @@ export default function App() {
   }
 
   if (screen === 'prepared') {
+    const remainingPhotos = MAX_RECEIPT_PHOTOS - preparedPageCount;
+
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
         <View style={styles.centeredPage}>
           <View style={styles.successMark}>
-            <Text style={styles.successMarkText}>✓</Text>
+            <Ionicons name="images-outline" size={28} color={colors.success} />
           </View>
-          <Text style={styles.pageTitle}>Receipt ready</Text>
-          <Text style={styles.centeredBody}>Draft saved locally.</Text>
+          <Text style={styles.pageTitle}>
+            {preparedPageCount} {preparedPageCount === 1 ? 'photo' : 'photos'} ready
+          </Text>
+          <Text style={styles.centeredBody}>
+            {remainingPhotos > 0
+              ? 'For a long receipt, add the next section in order. A small overlap is okay. Exact duplicate-looking item rows are flagged so you can decide what to keep.'
+              : 'Maximum of 5 photos reached. Recora will read them in this order as one receipt.'}
+          </Text>
+
+          <View style={styles.pageCountRow}>
+            {Array.from({ length: MAX_RECEIPT_PHOTOS }, (_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.pageDot,
+                  index < preparedPageCount && styles.pageDotFilled,
+                ]}
+              />
+            ))}
+          </View>
+
           {message ? <InlineError message={message} /> : null}
+
+          {remainingPhotos > 0 ? (
+            <View style={styles.addPhotoRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  startCapture('camera', captureReceiptWithCamera)
+                }
+                style={styles.addPhotoButton}
+                disabled={captureAction !== null}
+              >
+                <Ionicons
+                  name="camera-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.addPhotoButtonText}>Take next photo</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  startCapture('library', () =>
+                    importReceiptFromLibrary(remainingPhotos),
+                  )
+                }
+                style={styles.addPhotoButton}
+                disabled={captureAction !== null}
+              >
+                <Ionicons
+                  name="images-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.addPhotoButtonText}>Add from photos</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {preparedReceiptId ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => runOfflineOcr(preparedReceiptId)}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>Continue</Text>
+              <Text style={styles.primaryButtonText}>
+                Read {preparedPageCount > 1 ? preparedPageCount + ' photos' : 'receipt'}
+              </Text>
             </Pressable>
           ) : null}
+
           <Pressable
             accessibilityRole="button"
             onPress={() => {
               setPreparedReceiptId(null);
+              setPreparedPageCount(0);
+              setQueuedSources([]);
               setMessage(null);
               setScreen('home');
             }}
             style={styles.secondaryWideButton}
           >
-            <Text style={styles.secondaryWideButtonText}>Back to home</Text>
+            <Text style={styles.secondaryWideButtonText}>Save draft for later</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -986,7 +1127,7 @@ export default function App() {
               {captureAction === 'camera' ? 'Opening camera…' : 'Scan receipt'}
             </Text>
             <Text style={styles.scanPrimarySubtitle}>
-              Capture and reconstruct a purchase
+              Use 1–5 photos for short or long receipts
             </Text>
           </View>
           <Ionicons
@@ -1011,7 +1152,7 @@ export default function App() {
           <Text style={styles.importButtonText}>
             {captureAction === 'library'
               ? 'Opening photos…'
-              : 'Import from photos'}
+              : 'Import up to 5 photos'}
           </Text>
         </Pressable>
 
@@ -1113,9 +1254,18 @@ function createReceiptId(): string {
 }
 
 function ocrProgressTitle(
-  stage: OcrProgressEvent['stage'] | undefined,
+  progress: OcrProgressEvent | null,
 ): string {
-  switch (stage) {
+  if (
+    progress?.stage === 'recognizing-text' &&
+    progress.pageCount &&
+    progress.pageCount > 1 &&
+    progress.pageIndex !== undefined
+  ) {
+    return `Reading photo ${progress.pageIndex + 1} of ${progress.pageCount}`;
+  }
+
+  switch (progress?.stage) {
     case 'loading-receipt':
       return 'Preparing receipt';
     case 'recognizing-text':
@@ -1132,9 +1282,17 @@ function ocrProgressTitle(
 }
 
 function ocrProgressMessage(
-  stage: OcrProgressEvent['stage'] | undefined,
+  progress: OcrProgressEvent | null,
 ): string {
-  switch (stage) {
+  if (
+    progress?.stage === 'recognizing-text' &&
+    progress.pageCount &&
+    progress.pageCount > 1
+  ) {
+    return 'Reading each photo separately to keep long-receipt processing memory-safe.';
+  }
+
+  switch (progress?.stage) {
     case 'loading-receipt':
       return 'Getting the image ready.';
     case 'recognizing-text':
@@ -1353,6 +1511,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '900',
+  },
+  pageCountRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 18,
+  },
+  pageDot: {
+    width: 28,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+  },
+  pageDotFilled: {
+    backgroundColor: colors.primary,
+  },
+  addPhotoRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: 18,
+  },
+  addPhotoButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  addPhotoButtonText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   primaryButton: {
     width: '100%',

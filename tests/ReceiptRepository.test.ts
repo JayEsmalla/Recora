@@ -94,6 +94,13 @@ describe('ReceiptRepository', () => {
     await repository.createDraft({
       id: 'with-image',
       imageUri: 'file:///private/with-image.jpg',
+      imageWidth: 1000,
+      imageHeight: 2000,
+      now,
+    });
+    await repository.createDraft({
+      id: 'legacy-image-without-dimensions',
+      imageUri: 'file:///private/legacy-image.jpg',
       now,
     });
     await repository.createDraft({
@@ -101,9 +108,50 @@ describe('ReceiptRepository', () => {
       now,
     });
 
-    expect(await repository.listImageUris()).toEqual([
+    expect((await repository.listImageUris()).sort()).toEqual([
+      'file:///private/legacy-image.jpg',
       'file:///private/with-image.jpg',
     ]);
+  });
+
+  it('stores up to five ordered photos for one receipt', async () => {
+    await repository.createDraft({
+      id: 'long-receipt',
+      imageUri: 'file:///private/long-0.jpg',
+      imageWidth: 1000,
+      imageHeight: 2000,
+      now,
+    });
+
+    for (let position = 1; position < 5; position += 1) {
+      await repository.addPage({
+        receiptId: 'long-receipt',
+        imageUri: `file:///private/long-${position}.jpg`,
+        imageWidth: 1000,
+        imageHeight: 2000,
+        now,
+      });
+    }
+
+    const pages = await repository.listPages('long-receipt');
+    expect(pages.map((page) => page.position)).toEqual([0, 1, 2, 3, 4]);
+    expect(await repository.listReceiptImageUris('long-receipt')).toEqual([
+      'file:///private/long-0.jpg',
+      'file:///private/long-1.jpg',
+      'file:///private/long-2.jpg',
+      'file:///private/long-3.jpg',
+      'file:///private/long-4.jpg',
+    ]);
+
+    await expect(
+      repository.addPage({
+        receiptId: 'long-receipt',
+        imageUri: 'file:///private/long-5.jpg',
+        imageWidth: 1000,
+        imageHeight: 2000,
+        now,
+      }),
+    ).rejects.toThrow('at most 5 photos');
   });
 
   it('lists unaccepted drafts separately from accepted history', async () => {
@@ -167,8 +215,12 @@ describe('ReceiptRepository', () => {
     const adjustmentCount = await database.first<{ count: number }>(
       'SELECT COUNT(*) AS count FROM receipt_adjustments;',
     );
+    const pageCount = await database.first<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM receipt_pages;',
+    );
 
     expect(itemCount?.count).toBe(0);
     expect(adjustmentCount?.count).toBe(0);
+    expect(pageCount?.count).toBe(0);
   });
 });

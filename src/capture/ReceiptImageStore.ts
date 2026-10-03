@@ -42,10 +42,14 @@ export async function stageReceiptImage(
 export async function retainPreparedReceiptImage(
   image: PreparedReceiptImage,
   receiptId: string,
+  pagePosition = 0,
 ): Promise<PreparedReceiptImage> {
   const { receipts } = ensureDirectories();
   const sourceFile = new File(image.uri);
-  const destination = new File(receipts, `${receiptId}.jpg`);
+  const destination = new File(
+    receipts,
+    `${receiptId}-page-${pagePosition}.jpg`,
+  );
 
   await sourceFile.copy(destination, { overwrite: false });
 

@@ -4,7 +4,7 @@
 
 Recora is accountless and local-first.
 
-Structured receipt data is stored in SQLite. Retained receipt images are stored as app-private files and referenced by URI from SQLite. Receipt images are not stored as database BLOBs.
+Structured receipt data is stored in SQLite. One logical receipt can own 1–5 ordered retained receipt photos. Each photo is stored as an app-private file and referenced by URI from the `receipt_pages` SQLite table; receipt images are not stored as database BLOBs. The original receipt-level image fields remain as a compatibility reference for page 0.
 
 Raw OCR evidence is preserved separately from user-organized item names and normalized identities. Manual correction never rewrites the retained OCR text or source image.
 
@@ -23,8 +23,8 @@ Uninstalling the application removes its app-private database and retained recei
 At startup Recora:
 
 1. clears abandoned temporary staging images from interrupted capture/edit sessions;
-2. reads every receipt-image URI referenced by SQLite;
-3. removes retained receipt files that are no longer referenced by any receipt row.
+2. reads every receipt-page image URI referenced by SQLite, including legacy single-image references;
+3. removes retained receipt files that are no longer referenced by any receipt/page row.
 
 This specifically handles the crash window where a prepared image may have been copied into retained storage before the corresponding SQLite draft was committed.
 
@@ -32,11 +32,11 @@ Cleanup failure is non-fatal. The app continues to boot and reports the failure 
 
 ## Deletion
 
-Discarding an unfinished receipt deletes its SQLite receipt row and dependent OCR evidence, then removes its retained image.
+Discarding an unfinished receipt deletes its SQLite receipt row, dependent page rows, and OCR evidence, then removes every retained receipt photo.
 
-Deleting an accepted receipt removes its SQLite row and dependent line items, adjustments, and OCR evidence through foreign-key cascade behavior, then attempts to remove its retained image. History and price-history views are derived from accepted rows, so the deleted receipt stops contributing immediately.
+Deleting an accepted receipt removes its SQLite row and dependent page rows, line items, adjustments, and OCR evidence through foreign-key cascade behavior, then attempts to remove every retained receipt photo. History and price-history views are derived from accepted rows, so the deleted receipt stops contributing immediately.
 
-Image deletion is best-effort after the database state is committed. A file-system cleanup failure does not misreport or roll back an already completed database deletion; startup orphan pruning retries any now-unreferenced retained image.
+Receipt-photo deletion is best-effort after the database state is committed. A file-system cleanup failure does not misreport or roll back an already completed database deletion; startup orphan pruning retries any now-unreferenced retained photo.
 
 Accepted-receipt deletion requires destructive user confirmation in the UI.
 

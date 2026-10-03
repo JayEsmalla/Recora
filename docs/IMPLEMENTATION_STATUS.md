@@ -17,7 +17,9 @@
 
 Implemented:
 - camera capture through the operating-system image capture flow
-- photo-library import
+- one logical receipt supports 1–5 ordered retained photos for long receipts
+- sequential camera additions and ordered multi-photo library import, capped at 5 photos per receipt
+- each selected photo is cropped/rotated independently before becoming part of the receipt
 - receipt-focused capture guidance
 - app-private staging and retained receipt-image storage
 - four-corner manual crop control
@@ -58,6 +60,10 @@ Implemented:
 - persisted `ocr_runs` and `ocr_observations` evidence with receipt cascade deletion
 - source image width/height persisted for restart-safe OCR
 - completed OCR replaces prior OCR evidence transactionally
+- multi-photo receipts are recognized one retained page at a time, redacted independently, then merged into one ordered virtual OCR document without stitching image pixels
+- adding another receipt photo invalidates any stale OCR run so reconstruction cannot silently omit the new page
+- merged OCR observation IDs retain their source-page prefix and geometry is vertically offset in capture order
+- exact duplicate-looking item rows across different receipt photos surface an overlap-specific review warning rather than being auto-deleted
 - OCR failure or cancellation does not create accepted purchase history or partially persist a run
 - deterministic fake OCR engine for parser/integration testing
 - UI can run, cancel, and retry offline OCR; raw OCR output remains inspectable from the review evidence section without an extra intermediate screen
@@ -154,7 +160,7 @@ Implemented:
 - invalid editable values remain visible and cannot pollute persisted review data
 - missing item name and missing line total are blocking mismatches
 - non-blocking review warnings require explicit user acknowledgement before acceptance
-- original retained image and raw OCR text remain available as read-only verification evidence
+- every original retained receipt photo and the combined raw OCR text remain available as read-only verification evidence
 - review edits never overwrite raw OCR evidence
 - first review is persisted immediately when structurally valid so app restart can recover it
 - later review saves preserve corrected values instead of reparsing over them

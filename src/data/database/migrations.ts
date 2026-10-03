@@ -246,6 +246,41 @@ LEFT JOIN categories c ON c.id = COALESCE(li.category_id, ni.category_id)
 WHERE r.status = 'accepted';
 `,
   },
+  {
+    version: 4,
+    name: 'multi_photo_receipt_pages',
+    sql: `
+CREATE TABLE IF NOT EXISTS receipt_pages (
+  id TEXT PRIMARY KEY NOT NULL,
+  receipt_id TEXT NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 4),
+  image_uri TEXT NOT NULL,
+  image_width INTEGER NOT NULL CHECK(image_width > 0),
+  image_height INTEGER NOT NULL CHECK(image_height > 0),
+  created_at TEXT NOT NULL,
+  UNIQUE(receipt_id, position)
+);
+
+CREATE INDEX IF NOT EXISTS idx_receipt_pages_receipt_position
+  ON receipt_pages(receipt_id, position);
+
+INSERT OR IGNORE INTO receipt_pages (
+  id, receipt_id, position, image_uri, image_width, image_height, created_at
+)
+SELECT
+  'page-' || id || '-0',
+  id,
+  0,
+  image_uri,
+  image_width,
+  image_height,
+  created_at
+FROM receipts
+WHERE image_uri IS NOT NULL
+  AND image_width IS NOT NULL
+  AND image_height IS NOT NULL;
+`,
+  },
 ];
 
 export async function migrateDatabase(database: DatabaseConnection): Promise<void> {

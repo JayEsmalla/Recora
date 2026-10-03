@@ -1,10 +1,15 @@
 import * as ImagePicker from 'expo-image-picker';
 
-import { stageReceiptImage } from './ReceiptImageStore';
+import {
+  removePrivateReceiptImage,
+  stageReceiptImage,
+} from './ReceiptImageStore';
 import type { ReceiptImageSource } from './types';
 
+export const MAX_RECEIPT_PHOTOS = 5;
+
 export type CaptureResult =
-  | { status: 'captured'; image: ReceiptImageSource }
+  | { status: 'captured'; images: ReceiptImageSource[] }
   | { status: 'cancelled' }
   | { status: 'permission-denied'; source: 'camera' | 'library' };
 
@@ -24,10 +29,18 @@ export async function captureReceiptWithCamera(): Promise<CaptureResult> {
   return stagePickerResult(result, 'camera');
 }
 
-export async function importReceiptFromLibrary(): Promise<CaptureResult> {
+export async function importReceiptFromLibrary(
+  maxPhotos = MAX_RECEIPT_PHOTOS,
+): Promise<CaptureResult> {
+  const selectionLimit = Math.max(
+    1,
+    Math.min(MAX_RECEIPT_PHOTOS, Math.trunc(maxPhotos)),
+  );
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    allowsMultipleSelection: false,
+    allowsMultipleSelection: true,
+    selectionLimit,
+    orderedSelection: true,
     allowsEditing: false,
     quality: 1,
     exif: false,
@@ -49,23 +62,43 @@ async function stagePickerResult(
   result: ImagePicker.ImagePickerResult,
   origin: ReceiptImageSource['origin'],
 ): Promise<CaptureResult> {
-  if (result.canceled || !result.assets?.[0]) {
+  if (result.canceled || !result.assets?.length) {
     return { status: 'cancelled' };
   }
 
-  const asset = result.assets[0];
-  if (asset.width <= 0 || asset.height <= 0) {
-    throw new Error('The selected image did not report valid dimensions.');
+  if (result.assets.length > MAX_RECEIPT_PHOTOS) {
+    throw new Error(
+      `Select at most ${MAX_RECEIPT_PHOTOS} photos for one receipt.`,
+    );
   }
 
-  return {
-    status: 'captured',
-    image: await stageReceiptImage({
-      uri: asset.uri,
-      width: asset.width,
-      height: asset.height,
-      fileSize: asset.fileSize ?? null,
-      origin,
-    }),
-  };
+  const staged: ReceiptImageSource[] = [];
+
+  try {
+    for (const asset of result.assets) {
+      if (asset.width <= 0 || asset.height <= 0) {
+        throw new Error('A selected image did not report valid dimensions.');
+      }
+
+      staged.push(
+        await stageReceiptImage({
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          fileSize: asset.fileSize ?? null,
+          origin,
+        }),
+      );
+    }
+
+    return {
+      status: 'captured',
+      images: staged,
+    };
+  } catch (error) {
+    for (const image of staged) {
+      removePrivateReceiptImage(image.uri);
+    }
+    throw error;
+  }
 }

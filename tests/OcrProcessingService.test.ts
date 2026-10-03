@@ -93,6 +93,64 @@ describe('OcrProcessingService', () => {
     ).toBe(true);
   });
 
+  it('recognizes ordered receipt photos independently and stores one combined OCR run', async () => {
+    await receipts.addPage({
+      receiptId: 'receipt-1',
+      imageUri: 'file:///private/receipt-1-page-2.jpg',
+      imageWidth: 900,
+      imageHeight: 1800,
+      now,
+    });
+
+    const seenUris: string[] = [];
+    const secondPage: OcrDocument = {
+      ...fixture,
+      imageWidth: 900,
+      imageHeight: 1800,
+      rawText: 'BREAD 40.00\nTOTAL 125.00',
+    };
+    const engine: OcrEngine = {
+      id: 'multi-page-fixture',
+      async recognize(input) {
+        seenUris.push(input.uri);
+        return input.uri.includes('page-2') ? secondPage : fixture;
+      },
+    };
+    const events: {
+      stage: string;
+      pageIndex?: number;
+      pageCount?: number;
+    }[] = [];
+
+    const run = await new OcrProcessingService(
+      engine,
+      receipts,
+      ocr,
+    ).process({
+      receiptId: 'receipt-1',
+      now,
+      onProgress(event) {
+        events.push(event);
+      },
+    });
+
+    expect(seenUris).toEqual([
+      imageUri,
+      'file:///private/receipt-1-page-2.jpg',
+    ]);
+    expect(run.rawText).toBe(
+      'STORE\nTOTAL 85.00\nBREAD 40.00\nTOTAL 125.00',
+    );
+    expect(
+      events
+        .filter((event) => event.stage === 'recognizing-text')
+        .map((event) => [event.pageIndex, event.pageCount]),
+    ).toEqual([
+      [0, 2],
+      [1, 2],
+    ]);
+  });
+
   it('does not persist a cancelled OCR result', async () => {
     const controller = new AbortController();
     controller.abort();

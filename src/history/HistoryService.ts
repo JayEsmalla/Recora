@@ -82,7 +82,7 @@ export class HistoryService {
     return this.normalization.resetRulesForReceipt(receiptId);
   }
 
-  deleteReceipt(receiptId: string): Promise<string | null> {
+  deleteReceipt(receiptId: string): Promise<string[] | null> {
     return this.repository.deleteAcceptedReceipt(receiptId);
   }
 }

@@ -39,6 +39,8 @@ import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 
 interface ReceiptImageEditorProps {
   source: ReceiptImageSource;
+  pageNumber?: number;
+  totalPages?: number;
   onCancel: () => void;
   onReady: (image: PreparedReceiptImage) => Promise<void> | void;
 }
@@ -54,6 +56,8 @@ const HANDLE_SIZE = 30;
 
 export function ReceiptImageEditor({
   source,
+  pageNumber = 1,
+  totalPages = 1,
   onCancel,
   onReady,
 }: ReceiptImageEditorProps) {
@@ -168,8 +172,14 @@ export function ReceiptImageEditor({
     >
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>PREPARE</Text>
-          <Text style={styles.title}>Frame the receipt</Text>
+          <Text style={styles.eyebrow}>
+            {totalPages > 1
+              ? `PHOTO ${pageNumber} OF ${totalPages}`
+              : 'PREPARE'}
+          </Text>
+          <Text style={styles.title}>
+            {totalPages > 1 ? 'Frame this receipt section' : 'Frame the receipt'}
+          </Text>
         </View>
         <Pressable
           accessibilityRole="button"

@@ -23,9 +23,11 @@ The optimization rule is: remove work from the critical path before weakening co
 - crop dragging applies cumulative gesture deltas against the gesture-start crop instead of compounding them against already-moved corner state
 - temporary rotated/prepared files are removed as soon as they are no longer needed
 - hard OCR pixel limits and image-quality warnings remain intact
+- long receipts can use up to 5 independently prepared photos instead of forcing one extreme-resolution image into memory
 
 ## OCR and reconstruction
 
+- multi-photo receipts run native OCR sequentially per photo and merge recognized geometry afterward, avoiding simultaneous decoding/OCR of up to five full-resolution images
 - OCR observations are persisted in bounded multi-row SQLite inserts instead of one native bridge call per observation
 - the bundled ML Kit Latin-model availability check is cached after its first successful verification instead of repeating native discovery for every scan
 - freshly completed OCR evidence is passed directly into review reconstruction instead of being fetched again

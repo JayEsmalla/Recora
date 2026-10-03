@@ -44,6 +44,7 @@ export interface ReviewEvaluation {
 
 export interface ReviewSession {
   receipt: Receipt;
+  sourceImageUris: string[];
   rawOcrText: string;
   draft: ReviewDraft;
   evaluation: ReviewEvaluation;

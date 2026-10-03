@@ -674,6 +674,7 @@ export function ReceiptReviewScreen({
       <View style={styles.card}>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ expanded: showEvidence }}
           onPress={() => setShowEvidence((current) => !current)}
           style={styles.evidenceHeader}
         >
@@ -692,13 +693,26 @@ export function ReceiptReviewScreen({
 
         {showEvidence ? (
           <>
-            {initialSession.receipt.imageUri ? (
-              <Image
-                accessibilityLabel="Original retained receipt image"
-                source={{ uri: initialSession.receipt.imageUri }}
-                resizeMode="contain"
-                style={styles.receiptImage}
-              />
+            {initialSession.sourceImageUris.length > 0 ? (
+              initialSession.sourceImageUris.map((imageUri, index) => (
+                <View key={imageUri} style={styles.evidencePage}>
+                  {initialSession.sourceImageUris.length > 1 ? (
+                    <Text style={styles.evidencePageLabel}>
+                      PHOTO {index + 1} OF {initialSession.sourceImageUris.length}
+                    </Text>
+                  ) : null}
+                  <Image
+                    accessibilityLabel={
+                      initialSession.sourceImageUris.length > 1
+                        ? `Original retained receipt photo ${index + 1} of ${initialSession.sourceImageUris.length}`
+                        : 'Original retained receipt image'
+                    }
+                    source={{ uri: imageUri }}
+                    resizeMode="contain"
+                    style={styles.receiptImage}
+                  />
+                </View>
+              ))
             ) : (
               <Text style={styles.emptyText}>Original receipt image is unavailable.</Text>
             )}
@@ -1118,7 +1132,20 @@ const styles = StyleSheet.create({
   removeButton: { alignSelf: 'flex-start', marginTop: 14, paddingVertical: 5 },
   removeButtonText: { color: colors.error, fontSize: 12, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
-  receiptImage: { width: '100%', height: 360, marginTop: 16, borderRadius: 12, backgroundColor: '#ECEDE9' },
+  evidencePage: { marginTop: 14 },
+  evidencePageLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  receiptImage: {
+    width: '100%',
+    height: 360,
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: '#ECEDE9',
+  },
   evidenceLabel: { color: colors.primaryAlt, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginTop: 16 },
   ocrText: { color: '#303431', fontFamily: 'monospace', fontSize: 12, lineHeight: 18, marginTop: 8 },
   ackRow: {

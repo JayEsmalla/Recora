@@ -32,7 +32,10 @@ export class ReviewService {
       throw new Error('Provided OCR evidence does not belong to this receipt.');
     }
 
-    const receipt = await this.receipts.getById(receiptId);
+    const [receipt, pages] = await Promise.all([
+      this.receipts.getById(receiptId),
+      this.receipts.listPages(receiptId),
+    ]);
 
     if (!receipt) {
       throw new Error(`Receipt not found: ${receiptId}`);
@@ -41,12 +44,20 @@ export class ReviewService {
       throw new Error('Accepted receipts cannot be reopened as an unreviewed draft.');
     }
 
+    const sourceImageUris =
+      pages.length > 0
+        ? pages.map((page) => page.imageUri)
+        : receipt.imageUri
+          ? [receipt.imageUri]
+          : [];
+
     if (receipt.status === 'review') {
       const stored = await this.receipts.getReviewDataForReceipt(receipt);
       const draft = createReviewDraftFromStored(stored);
 
       return {
         receipt,
+        sourceImageUris,
         rawOcrText: receipt.rawOcrText ?? '',
         draft,
         evaluation: evaluateReviewDraft(draft, now),
@@ -88,6 +99,7 @@ export class ReviewService {
 
     return {
       receipt: currentReceipt,
+      sourceImageUris,
       rawOcrText: run.rawText,
       draft,
       evaluation,
@@ -109,13 +121,22 @@ export class ReviewService {
       buildPersistenceInput(receiptId, draft, evaluation, now.toISOString()),
     );
 
-    const receipt = await this.receipts.getById(receiptId);
+    const [receipt, pages] = await Promise.all([
+      this.receipts.getById(receiptId),
+      this.receipts.listPages(receiptId),
+    ]);
     if (!receipt) {
       throw new Error('Receipt review could not be reloaded after saving.');
     }
 
     return {
       receipt,
+      sourceImageUris:
+        pages.length > 0
+          ? pages.map((page) => page.imageUri)
+          : receipt.imageUri
+            ? [receipt.imageUri]
+            : [],
       rawOcrText: receipt.rawOcrText ?? '',
       draft,
       evaluation,
@@ -152,8 +173,11 @@ export class ReviewService {
     );
   }
 
-  async discard(receiptId: string): Promise<string | null> {
-    const receipt = await this.receipts.getById(receiptId);
+  async discard(receiptId: string): Promise<string[] | null> {
+    const [receipt, imageUris] = await Promise.all([
+      this.receipts.getById(receiptId),
+      this.receipts.listReceiptImageUris(receiptId),
+    ]);
     if (!receipt) {
       return null;
     }
@@ -162,7 +186,11 @@ export class ReviewService {
     }
 
     await this.receipts.deleteReceipt(receiptId);
-    return receipt.imageUri;
+    return imageUris.length > 0
+      ? imageUris
+      : receipt.imageUri
+        ? [receipt.imageUri]
+        : [];
   }
 }
 
