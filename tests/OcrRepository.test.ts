@@ -91,6 +91,12 @@ describe('OcrRepository', () => {
     expect((await receipts.getById('receipt-1'))?.rawOcrText).toBe(
       'STORE\nMILK 85.00',
     );
+    expect((await receipts.listUnfinished())[0]).toEqual(
+      expect.objectContaining({
+        id: 'receipt-1',
+        hasOcrText: true,
+      }),
+    );
 
     const reloaded = await ocr.getForReceipt('receipt-1');
     expect(reloaded?.engine).toBe('fixture');
@@ -155,6 +161,58 @@ describe('OcrRepository', () => {
 
     expect(storedIds).toHaveLength(2);
     expect(storedIds[0]?.id).not.toBe(storedIds[1]?.id);
+  });
+
+  it('persists large OCR evidence across multiple batched insert chunks', async () => {
+    const largeDocument: OcrDocument = {
+      engine: 'fixture',
+      imageWidth: 1200,
+      imageHeight: 12000,
+      rawText: Array.from({ length: 120 }, (_, index) => `ITEM ${index} 1.00`).join('\n'),
+      blocks: [
+        {
+          id: 'large-block',
+          text: 'large receipt',
+          frame: { x: 0, y: 0, width: 1200, height: 12000 },
+          confidence: null,
+          lines: Array.from({ length: 120 }, (_, index) => ({
+            id: `large-line-${index}`,
+            text: `ITEM ${index} 1.00`,
+            frame: { x: 20, y: index * 80, width: 1100, height: 50 },
+            confidence: null,
+            elements: [
+              {
+                id: `large-line-${index}-name`,
+                text: `ITEM ${index}`,
+                frame: { x: 20, y: index * 80, width: 700, height: 50 },
+                confidence: null,
+              },
+              {
+                id: `large-line-${index}-amount`,
+                text: '1.00',
+                frame: { x: 900, y: index * 80, width: 180, height: 50 },
+                confidence: null,
+              },
+            ],
+          })),
+        },
+      ],
+    };
+
+    const stored = await ocr.replaceForReceipt(
+      'receipt-1',
+      largeDocument,
+      now,
+    );
+    const reloaded = await ocr.getForReceipt('receipt-1');
+
+    expect(stored.observations).toHaveLength(361);
+    expect(reloaded?.observations).toHaveLength(361);
+    expect(
+      reloaded?.observations.find(
+        (item) => item.id === 'large-line-119-amount',
+      )?.text,
+    ).toBe('1.00');
   });
 
   it('cascades OCR evidence when its receipt is deleted', async () => {

@@ -19,27 +19,53 @@ export class ParserProcessingService {
       throw new Error('Receipt does not have completed OCR evidence.');
     }
 
+    return this.parseRun(run, options);
+  }
+
+  parseRun(
+    run: StoredOcrRun,
+    options?: ReceiptParserOptions,
+  ): ReceiptCandidate {
     return parseReceipt(rebuildDocument(run), options);
   }
 }
 
 export function rebuildDocument(run: StoredOcrRun): OcrDocument {
-  const blocks = run.observations
-    .filter((item) => item.kind === 'block')
+  const blocks: StoredOcrObservation[] = [];
+  const linesByParent = new Map<string, StoredOcrObservation[]>();
+  const elementsByParent = new Map<string, StoredOcrObservation[]>();
+
+  for (const observation of run.observations) {
+    if (observation.kind === 'block') {
+      blocks.push(observation);
+      continue;
+    }
+
+    if (!observation.parentId) {
+      continue;
+    }
+
+    const target =
+      observation.kind === 'line' ? linesByParent : elementsByParent;
+    const siblings = target.get(observation.parentId);
+    if (siblings) {
+      siblings.push(observation);
+    } else {
+      target.set(observation.parentId, [observation]);
+    }
+  }
+
+  const rebuiltBlocks = blocks
     .sort(byPosition)
     .map((block): OcrBlock => {
-      const lines = run.observations
-        .filter((item) => item.kind === 'line' && item.parentId === block.id)
+      const lines = (linesByParent.get(block.id) ?? [])
         .sort(byPosition)
         .map((line): OcrLine => ({
           id: line.id,
           text: line.text,
           frame: line.frame,
           confidence: line.confidence,
-          elements: run.observations
-            .filter(
-              (item) => item.kind === 'element' && item.parentId === line.id,
-            )
+          elements: (elementsByParent.get(line.id) ?? [])
             .sort(byPosition)
             .map((element) => ({
               id: element.id,
@@ -63,7 +89,7 @@ export function rebuildDocument(run: StoredOcrRun): OcrDocument {
     imageWidth: run.imageWidth,
     imageHeight: run.imageHeight,
     rawText: run.rawText,
-    blocks,
+    blocks: rebuiltBlocks,
   };
 }
 

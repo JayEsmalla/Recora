@@ -27,7 +27,7 @@ Implemented:
 - conservative JPEG preparation; automatic brightness/contrast filters are intentionally not enabled without corpus evidence that they improve thermal-text OCR
 - long-image resizing that preserves aspect ratio while enforcing a hard OCR pixel/memory budget
 - automatic structural quality checks for resolution, extreme compression, and unusual receipt aspect ratio
-- explicit user quality confirmation for sharpness, lighting, and complete framing
+- one explicit readability/completeness confirmation covering sharp text, usable lighting, and complete framing
 - Android image-picker recovery path after activity destruction
 - draft creation only after the prepared image is retained successfully
 
@@ -60,7 +60,7 @@ Implemented:
 - completed OCR replaces prior OCR evidence transactionally
 - OCR failure or cancellation does not create accepted purchase history or partially persist a run
 - deterministic fake OCR engine for parser/integration testing
-- UI can run, cancel, retry, and inspect raw offline OCR output
+- UI can run, cancel, and retry offline OCR; raw OCR output remains inspectable from the review evidence section without an extra intermediate screen
 
 Native configuration evidence:
 - Expo prebuild succeeds for Android
@@ -253,3 +253,32 @@ The roadmap implementation is complete, but a **final release-quality claim is i
 - iOS native build and backup-exclusion verification if iOS is included in the demonstrated target set
 
 These are evidence-gathering gates, not unimplemented core application phases.
+
+## Post-roadmap refinement and performance hardening
+
+Implemented:
+- Home opens camera/import directly instead of routing through a redundant capture-guide screen
+- successful image preparation starts OCR immediately; successful OCR proceeds directly to structured review
+- startup unfinished-receipt lookup uses lightweight summaries without loading full raw OCR text; retained-image orphan scanning is deferred off the first usable screen
+- no-op full-image preparation bypasses unnecessary JPEG manipulation when the image is already within the OCR pixel budget
+- crop dragging no longer compounds cumulative gesture movement against already-updated corner state
+- temporary image-manipulation files are cleaned up promptly instead of waiting for a later startup sweep
+- OCR observations use bounded batched SQLite inserts
+- the bundled ML Kit Latin-model availability check is cached after the first successful verification
+- review line items and adjustments use bounded batched SQLite inserts
+- persisted OCR reconstruction indexes parent/child observations once rather than repeatedly filtering the complete observation set
+- resumed reviews and review-draft saves avoid reloading full spatial OCR observations when receipt-level raw evidence is already available
+- parser and validator duplicate detection use keyed lookups instead of quadratic scans
+- confidence scoring and review-state persistence index validation issues once rather than filtering the complete issue list per field
+- review validation is deferred during typing but recomputed synchronously before save/accept
+- long review forms render items progressively while validating the complete receipt
+- long accepted-receipt and price-history lists render progressively
+- review issue navigation now accounts for nested layout offsets and expands hidden long-receipt rows when needed
+- history initially queries only the visible receipts mode; item results load when requested
+- static categories are reused across searches
+- receipt detail does not wait for optional normalized-item suggestions
+- fast local navigation suppresses loading-screen flashes through delayed loading indicators
+- accepted-save UI no longer waits for non-critical merchant normalization-rule application
+- redundant local/offline explanatory copy and developer-oriented status text were removed while safety-critical explanations remain
+
+Detailed rationale and remaining device profiling gates are recorded in `docs/PERFORMANCE_HARDENING.md`.

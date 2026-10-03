@@ -131,6 +131,40 @@ describe('ReceiptRepository review integrity', () => {
     expect(review?.adjustments[0]?.amountMinor).toBe(-500);
   });
 
+  it('persists long reviewed receipts across multiple batched child inserts', async () => {
+    await repository.createDraft({ id: 'long-receipt', now });
+
+    const lineItems = Array.from({ length: 121 }, (_, position) => ({
+      id: `long-item-${position}`,
+      position,
+      rawName: `ITEM ${position}`,
+      lineTotalMinor: 100,
+      reviewState: 'verified' as const,
+    }));
+    const adjustments = Array.from({ length: 101 }, (_, position) => ({
+      id: `long-adjustment-${position}`,
+      position,
+      kind: 'other' as const,
+      label: `Adjustment ${position}`,
+      amountMinor: 1,
+      reviewState: 'verified' as const,
+    }));
+
+    await repository.replaceReviewData({
+      receiptId: 'long-receipt',
+      validationState: 'review',
+      lineItems,
+      adjustments,
+      now,
+    });
+
+    const review = await repository.getReviewData('long-receipt');
+    expect(review?.lineItems).toHaveLength(121);
+    expect(review?.adjustments).toHaveLength(101);
+    expect(review?.lineItems[120]?.rawName).toBe('ITEM 120');
+    expect(review?.adjustments[100]?.label).toBe('Adjustment 100');
+  });
+
   it('rolls back acceptance completely when child persistence fails', async () => {
     await repository.createDraft({ id: 'receipt-1', now });
     await repository.replaceReviewData({

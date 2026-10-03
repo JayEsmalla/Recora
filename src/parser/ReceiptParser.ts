@@ -329,6 +329,7 @@ function parseLineItems(
   });
 
   const items: ParsedLineItemCandidate[] = [];
+  const firstItemByDuplicateKey = new Map<string, ParsedLineItemCandidate>();
   let pendingDescription: OcrLine | null = null;
 
   for (const line of candidates) {
@@ -371,11 +372,8 @@ function parseLineItems(
       parsed.observationIds = [pendingDescription.id, line.id];
     }
 
-    const duplicate = items.find(
-      (item) =>
-        normalizeItemKey(item.rawName) === normalizeItemKey(parsed.rawName) &&
-        item.lineTotalMinor === parsed.lineTotalMinor,
-    );
+    const duplicateKey = `${normalizeItemKey(parsed.rawName)}\u0000${parsed.lineTotalMinor}`;
+    const duplicate = firstItemByDuplicateKey.get(duplicateKey);
 
     if (duplicate) {
       parsed.possibleDuplicateOf = duplicate.id;
@@ -384,6 +382,8 @@ function parseLineItems(
         message: `"${parsed.rawName}" appears more than once with the same amount.`,
         observationIds: parsed.observationIds,
       });
+    } else {
+      firstItemByDuplicateKey.set(duplicateKey, parsed);
     }
 
     items.push(parsed);

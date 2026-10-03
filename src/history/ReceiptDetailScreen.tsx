@@ -47,6 +47,9 @@ export function ReceiptDetailScreen({
   onBack,
 }: ReceiptDetailScreenProps) {
   const [detail, setDetail] = useState(initialDetail);
+  const [visibleItemCount, setVisibleItemCount] = useState(
+    Math.min(30, initialDetail.items.length),
+  );
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [canonicalName, setCanonicalName] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -230,11 +233,8 @@ export function ReceiptDetailScreen({
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Items</Text>
-        <Text style={styles.sectionHint}>
-          Organized names are separate from the original receipt descriptions.
-        </Text>
 
-        {detail.items.map((item) => (
+        {detail.items.slice(0, visibleItemCount).map((item) => (
           <View key={item.lineItemId} style={styles.itemCard}>
             <View style={styles.itemHeader}>
               <View style={styles.itemCopy}>
@@ -291,10 +291,9 @@ export function ReceiptDetailScreen({
 
             {editingItemId === item.lineItemId ? (
               <View style={styles.organizeCard}>
-                <Text style={styles.organizeTitle}>Organized item identity</Text>
+                <Text style={styles.organizeTitle}>Organize item</Text>
                 <Text style={styles.organizeHint}>
-                  Use a stable name that should group equivalent purchases. The
-                  receipt text above remains unchanged.
+                  Group equivalent purchases under one stable name. Receipt text stays unchanged.
                 </Text>
 
                 <TextInput
@@ -367,8 +366,7 @@ export function ReceiptDetailScreen({
                   </Text>
                 </Pressable>
                 <Text style={styles.learningHint}>
-                  Recora only learns an exact merchant-specific text match. It does
-                  not guess that similar-looking products are identical.
+                  Exact text match for this merchant only; similar names are not guessed.
                 </Text>
 
                 <View style={styles.organizeActions}>
@@ -395,6 +393,22 @@ export function ReceiptDetailScreen({
             ) : null}
           </View>
         ))}
+
+        {visibleItemCount < detail.items.length ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              setVisibleItemCount((current) =>
+                Math.min(detail.items.length, current + 30),
+              )
+            }
+            style={styles.secondaryWide}
+          >
+            <Text style={styles.secondaryWideText}>
+              Show more items · {detail.items.length - visibleItemCount} remaining
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {detail.adjustments.length > 0 ? (
@@ -422,9 +436,7 @@ export function ReceiptDetailScreen({
         >
           <View style={styles.itemCopy}>
             <Text style={styles.sectionTitle}>Source receipt</Text>
-            <Text style={styles.sectionHint}>
-              Read-only image and OCR evidence for traceability.
-            </Text>
+            <Text style={styles.sectionHint}>Read-only original evidence</Text>
           </View>
           <Text style={styles.chevron}>{showEvidence ? '⌃' : '⌄'}</Text>
         </Pressable>
@@ -450,10 +462,9 @@ export function ReceiptDetailScreen({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Local learning</Text>
+        <Text style={styles.sectionTitle}>Merchant learning</Text>
         <Text style={styles.sectionHint}>
-          Reset exact merchant-specific item corrections without changing saved
-          receipt descriptions or organized identities.
+          Reset remembered exact-name matches. Saved receipt data is unchanged.
         </Text>
         <Pressable
           accessibilityRole="button"

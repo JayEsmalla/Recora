@@ -41,6 +41,7 @@ The native OCR module requires a development/native build; Expo Go is not the ru
 - [Implementation Status](docs/IMPLEMENTATION_STATUS.md)
 - [QA and Release Evidence](docs/QA_AND_RELEASE.md)
 - [Data, Privacy, Cleanup, and Recovery](docs/DATA_AND_RECOVERY.md)
+- [Refinement and Performance Hardening](docs/PERFORMANCE_HARDENING.md)
 
 ## Scope
 

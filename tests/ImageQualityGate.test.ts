@@ -7,9 +7,7 @@ import type {
 } from '../src/capture/types';
 
 const clearChecks: ManualQualityChecks = {
-  sharpText: true,
-  evenLighting: true,
-  fullyVisible: true,
+  readableAndComplete: true,
 };
 
 const goodImage: PreparedReceiptImage = {
@@ -38,15 +36,18 @@ describe('receipt image quality gate', () => {
     expect(assessment.issues.some((issue) => issue.code === 'tiny-image')).toBe(true);
   });
 
-  it('blocks the workflow when the user confirms blur, lighting, or framing problems', () => {
+  it('blocks the workflow until readability and framing are confirmed', () => {
     const assessment = assessReceiptImageQuality(goodImage, {
-      sharpText: false,
-      evenLighting: false,
-      fullyVisible: false,
+      readableAndComplete: false,
     });
 
     expect(assessment.canContinue).toBe(false);
-    expect(assessment.issues.filter((issue) => issue.severity === 'blocker')).toHaveLength(3);
+    expect(assessment.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'readability-confirmation',
+        severity: 'blocker',
+      }),
+    );
   });
 
   it('warns without rejecting unusually long but readable receipts', () => {

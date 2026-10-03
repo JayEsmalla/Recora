@@ -76,11 +76,32 @@ export async function prepareReceiptImage(
     options.maxPixels,
   );
 
+  const fullImage =
+    cropPixels.originX === 0 &&
+    cropPixels.originY === 0 &&
+    cropPixels.width === workingSource.width &&
+    cropPixels.height === workingSource.height;
+  const resizeNeeded =
+    resize.width !== cropPixels.width || resize.height !== cropPixels.height;
+
+  if (fullImage && !resizeNeeded) {
+    const sourceFile = new File(workingSource.uri);
+    return {
+      uri: workingSource.uri,
+      width: workingSource.width,
+      height: workingSource.height,
+      fileSize:
+        workingSource.fileSize ??
+        (sourceFile.exists ? sourceFile.size : null),
+      cropCoverage: 1,
+    };
+  }
+
   const actions: Parameters<typeof manipulateAsync>[1] = [
     { crop: cropPixels },
   ];
 
-  if (resize.width !== cropPixels.width || resize.height !== cropPixels.height) {
+  if (resizeNeeded) {
     actions.push({ resize });
   }
 

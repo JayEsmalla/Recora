@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/data/database/migrations';
 import { ReceiptRepository } from '../src/data/repositories/ReceiptRepository';
 import { HistoryRepository } from '../src/history/HistoryRepository';
+import { HistoryService } from '../src/history/HistoryService';
+import { NormalizationService } from '../src/history/NormalizationService';
 import {
   createSqlJsConnection,
   type SqlJsConnection,
@@ -66,6 +68,23 @@ describe('HistoryRepository', () => {
 
   afterEach(() => {
     database.close();
+  });
+
+  it('loads only the active history mode when requested', async () => {
+    const service = new HistoryService(
+      history,
+      new NormalizationService(history),
+    );
+
+    const receiptsOnly = await service.loadOverview({}, 'receipts', false);
+    expect(receiptsOnly.receipts).toHaveLength(2);
+    expect(receiptsOnly.items).toEqual([]);
+    expect(receiptsOnly.categories).toEqual([]);
+
+    const itemsOnly = await service.loadOverview({}, 'items', false);
+    expect(itemsOnly.receipts).toEqual([]);
+    expect(itemsOnly.items).toHaveLength(3);
+    expect(itemsOnly.categories).toEqual([]);
   });
 
   it('lists accepted receipts newest first and excludes unfinished drafts', async () => {
@@ -156,12 +175,12 @@ describe('HistoryRepository', () => {
     merchant: string;
     purchasedAt: string;
     totalMinor: number;
-    items: Array<{
+    items: {
       id: string;
       rawName: string;
       unitPriceMinor: number;
       lineTotalMinor: number;
-    }>;
+    }[];
   }) {
     await receipts.createDraft({
       id: input.id,

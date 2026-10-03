@@ -1,9 +1,14 @@
-import MlkitOcr from 'rn-mlkit-ocr';
+import {
+  getAvailableLanguages,
+  recognizeText,
+} from 'rn-mlkit-ocr';
 
 import { normalizeMlKitResult } from './normalizeOcrResult';
 import type { OcrDocument, OcrEngine, OcrInput } from './types';
 
 const ENGINE_ID = 'mlkit-latin-bundled';
+
+let latinAvailabilityPromise: Promise<void> | null = null;
 
 export class MlKitOcrEngine implements OcrEngine {
   readonly id = ENGINE_ID;
@@ -14,16 +19,10 @@ export class MlKitOcrEngine implements OcrEngine {
   ): Promise<OcrDocument> {
     throwIfAborted(signal);
 
-    const languages = await MlkitOcr.getAvailableLanguages();
+    await ensureBundledLatinModel();
     throwIfAborted(signal);
 
-    if (!languages.includes('latin')) {
-      throw new Error(
-        'The bundled Latin OCR model is unavailable in this build.',
-      );
-    }
-
-    const result = await MlkitOcr.recognizeText(input.uri, 'latin');
+    const result = await recognizeText(input.uri, 'latin');
     throwIfAborted(signal);
 
     return normalizeMlKitResult(
@@ -33,6 +32,25 @@ export class MlKitOcrEngine implements OcrEngine {
       this.id,
     );
   }
+}
+
+async function ensureBundledLatinModel(): Promise<void> {
+  if (!latinAvailabilityPromise) {
+    latinAvailabilityPromise = getAvailableLanguages()
+      .then((languages) => {
+        if (!languages.includes('latin')) {
+          throw new Error(
+            'The bundled Latin OCR model is unavailable in this build.',
+          );
+        }
+      })
+      .catch((error) => {
+        latinAvailabilityPromise = null;
+        throw error;
+      });
+  }
+
+  return latinAvailabilityPromise;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

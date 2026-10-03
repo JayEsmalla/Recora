@@ -14,11 +14,17 @@ import type {
   ItemSearchEntry,
   ReceiptHistoryEntry,
 } from './types';
-import type { HistoryOverview } from './HistoryService';
+import type {
+  HistoryLoadMode,
+  HistoryOverview,
+} from './HistoryService';
 
 interface HistoryScreenProps {
   initialOverview: HistoryOverview;
-  onSearch: (filters: HistoryFilters) => Promise<HistoryOverview>;
+  onSearch: (
+    filters: HistoryFilters,
+    mode: HistoryLoadMode,
+  ) => Promise<HistoryOverview>;
   onOpenReceipt: (receiptId: string) => void;
   onOpenItem: (item: ItemSearchEntry) => void;
   onBack: () => void;
@@ -35,6 +41,9 @@ export function HistoryScreen({
 }: HistoryScreenProps) {
   const [overview, setOverview] = useState(initialOverview);
   const [mode, setMode] = useState<HistoryMode>('receipts');
+  const [itemsLoaded, setItemsLoaded] = useState(
+    initialOverview.items.length > 0,
+  );
   const [query, setQuery] = useState('');
   const [merchantQuery, setMerchantQuery] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -46,6 +55,7 @@ export function HistoryScreen({
 
   async function search(
     overrides: Partial<HistoryFilters> = {},
+    targetMode: HistoryMode = mode,
   ): Promise<void> {
     if (busy) {
       return;
@@ -63,8 +73,25 @@ export function HistoryScreen({
     setBusy(true);
     setError(null);
     try {
-      const next = await onSearch(filters);
-      setOverview(next);
+      const next = await onSearch(filters, targetMode);
+      setOverview((current) =>
+        targetMode === 'receipts'
+          ? {
+              ...current,
+              receipts: next.receipts,
+              categories:
+                next.categories.length > 0 ? next.categories : current.categories,
+            }
+          : {
+              ...current,
+              items: next.items,
+              categories:
+                next.categories.length > 0 ? next.categories : current.categories,
+            },
+      );
+      if (targetMode === 'items') {
+        setItemsLoaded(true);
+      }
     } catch (cause) {
       setError(messageFromError(cause, 'Could not search local purchase history.'));
     } finally {
@@ -77,6 +104,13 @@ export function HistoryScreen({
     await search({ categoryId: nextCategoryId });
   }
 
+  function selectMode(nextMode: HistoryMode) {
+    setMode(nextMode);
+    if (nextMode === 'items' && !itemsLoaded) {
+      void search({}, 'items');
+    }
+  }
+
   async function clearFilters() {
     setQuery('');
     setMerchantQuery('');
@@ -86,7 +120,25 @@ export function HistoryScreen({
     setBusy(true);
     setError(null);
     try {
-      setOverview(await onSearch({}));
+      const next = await onSearch({}, mode);
+      setOverview((current) =>
+        mode === 'receipts'
+          ? {
+              ...current,
+              receipts: next.receipts,
+              categories:
+                next.categories.length > 0 ? next.categories : current.categories,
+            }
+          : {
+              ...current,
+              items: next.items,
+              categories:
+                next.categories.length > 0 ? next.categories : current.categories,
+            },
+      );
+      if (mode === 'items') {
+        setItemsLoaded(true);
+      }
     } catch (cause) {
       setError(messageFromError(cause, 'Could not reset history filters.'));
     } finally {
@@ -107,22 +159,19 @@ export function HistoryScreen({
         <Text style={styles.eyebrow}>PURCHASE HISTORY</Text>
       </View>
 
-      <Text style={styles.title}>Find receipts and items locally.</Text>
-      <Text style={styles.body}>
-        Only reviewed and accepted receipts appear here. Search never includes
-        unfinished OCR drafts.
-      </Text>
+      <Text style={styles.title}>Receipts & items</Text>
+      <Text style={styles.body}>Only reviewed receipts appear in history.</Text>
 
       <View style={styles.modeRow}>
         <ModeButton
           label="Receipts"
           selected={mode === 'receipts'}
-          onPress={() => setMode('receipts')}
+          onPress={() => selectMode('receipts')}
         />
         <ModeButton
           label="Items"
           selected={mode === 'items'}
-          onPress={() => setMode('items')}
+          onPress={() => selectMode('items')}
         />
       </View>
 

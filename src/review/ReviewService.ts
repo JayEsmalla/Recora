@@ -1,4 +1,7 @@
-import type { OcrRepository } from '../data/repositories/OcrRepository';
+import type {
+  OcrRepository,
+  StoredOcrRun,
+} from '../data/repositories/OcrRepository';
 import type {
   ReceiptRepository,
   ReplaceReviewDataInput,
@@ -20,55 +23,74 @@ export class ReviewService {
     private readonly parser: ParserProcessingService,
   ) {}
 
-  async load(receiptId: string, now = new Date()): Promise<ReviewSession> {
-    const [receipt, run] = await Promise.all([
-      this.receipts.getById(receiptId),
-      this.ocr.getForReceipt(receiptId),
-    ]);
+  async load(
+    receiptId: string,
+    now = new Date(),
+    providedRun?: StoredOcrRun,
+  ): Promise<ReviewSession> {
+    if (providedRun && providedRun.receiptId !== receiptId) {
+      throw new Error('Provided OCR evidence does not belong to this receipt.');
+    }
+
+    const receipt = await this.receipts.getById(receiptId);
 
     if (!receipt) {
       throw new Error(`Receipt not found: ${receiptId}`);
-    }
-    if (!run) {
-      throw new Error('Receipt does not have completed OCR evidence.');
     }
     if (receipt.status === 'accepted') {
       throw new Error('Accepted receipts cannot be reopened as an unreviewed draft.');
     }
 
-    let draft: ReviewDraft;
+    if (receipt.status === 'review') {
+      const stored = await this.receipts.getReviewDataForReceipt(receipt);
+      const draft = createReviewDraftFromStored(stored);
+
+      return {
+        receipt,
+        rawOcrText: receipt.rawOcrText ?? '',
+        draft,
+        evaluation: evaluateReviewDraft(draft, now),
+      };
+    }
+
+    const run = providedRun ?? (await this.ocr.getForReceipt(receiptId));
+    if (!run) {
+      throw new Error('Receipt does not have completed OCR evidence.');
+    }
+
+    const candidate = this.parser.parseRun(run);
+    const draft = createReviewDraft(candidate, receiptId);
+    const evaluation = evaluateReviewDraft(draft, now);
     let currentReceipt = receipt;
 
-    if (receipt.status === 'review') {
-      const stored = await this.receipts.getReviewData(receiptId);
-      if (!stored) {
-        throw new Error(`Receipt not found: ${receiptId}`);
-      }
-      draft = createReviewDraftFromStored(stored);
-    } else {
-      const candidate = await this.parser.parseReceipt(receiptId);
-      draft = createReviewDraft(candidate, receiptId);
-      const evaluation = evaluateReviewDraft(draft, now);
-
-      if (evaluation.inputErrors.length === 0) {
-        await this.receipts.replaceReviewData(
-          buildPersistenceInput(
-            receiptId,
-            draft,
-            evaluation,
-            now.toISOString(),
-          ),
-        );
-        currentReceipt =
-          (await this.receipts.getById(receiptId)) ?? currentReceipt;
-      }
+    if (evaluation.inputErrors.length === 0) {
+      const persisted = buildPersistenceInput(
+        receiptId,
+        draft,
+        evaluation,
+        now.toISOString(),
+      );
+      await this.receipts.replaceReviewData(persisted);
+      currentReceipt = {
+        ...currentReceipt,
+        merchantId: persisted.merchantId ?? null,
+        merchantRawName: persisted.merchantRawName ?? null,
+        purchasedAt: persisted.purchasedAt ?? null,
+        subtotalMinor: persisted.subtotalMinor ?? null,
+        totalMinor: persisted.totalMinor ?? null,
+        transactionType:
+          persisted.transactionType ?? currentReceipt.transactionType,
+        validationState: persisted.validationState,
+        status: 'review',
+        updatedAt: persisted.now,
+      };
     }
 
     return {
       receipt: currentReceipt,
       rawOcrText: run.rawText,
       draft,
-      evaluation: evaluateReviewDraft(draft, now),
+      evaluation,
     };
   }
 
@@ -87,17 +109,14 @@ export class ReviewService {
       buildPersistenceInput(receiptId, draft, evaluation, now.toISOString()),
     );
 
-    const [receipt, run] = await Promise.all([
-      this.receipts.getById(receiptId),
-      this.ocr.getForReceipt(receiptId),
-    ]);
-    if (!receipt || !run) {
+    const receipt = await this.receipts.getById(receiptId);
+    if (!receipt) {
       throw new Error('Receipt review could not be reloaded after saving.');
     }
 
     return {
       receipt,
-      rawOcrText: run.rawText,
+      rawOcrText: receipt.rawOcrText ?? '',
       draft,
       evaluation,
     };
@@ -160,6 +179,9 @@ function buildPersistenceInput(
       field.confidenceBasisPoints,
     ]),
   );
+  const reviewStateByField = indexReviewStates(
+    evaluation.validation.issues,
+  );
 
   return {
     receiptId,
@@ -179,10 +201,8 @@ function buildPersistenceInput(
       lineTotalMinor: item.lineTotalMinor,
       confidenceBasisPoints:
         confidenceByField.get(`items.${item.id}`) ?? null,
-      reviewState: fieldState(
-        `items.${item.id}`,
-        evaluation.validation.issues,
-      ),
+      reviewState:
+        reviewStateByField.get(`items.${item.id}`) ?? 'verified',
     })),
     adjustments: candidate.summary.adjustments.map((adjustment) => ({
       id: adjustment.id,
@@ -192,33 +212,34 @@ function buildPersistenceInput(
       amountMinor: adjustment.amountMinor,
       confidenceBasisPoints:
         confidenceByField.get(`adjustments.${adjustment.id}`) ?? null,
-      reviewState: fieldState(
-        `adjustments.${adjustment.id}`,
-        evaluation.validation.issues,
-      ),
+      reviewState:
+        reviewStateByField.get(`adjustments.${adjustment.id}`) ?? 'verified',
     })),
     now,
   };
 }
 
-function fieldState(
-  fieldPath: string,
+function indexReviewStates(
   issues: readonly {
     fieldPath: string;
     state: Exclude<ValidationState, 'verified'>;
   }[],
-): ValidationState {
-  const relevant = issues.filter(
-    (issue) =>
-      issue.fieldPath === fieldPath ||
-      issue.fieldPath.startsWith(`${fieldPath}.`),
-  );
+): Map<string, ValidationState> {
+  const states = new Map<string, ValidationState>();
 
-  if (relevant.some((issue) => issue.state === 'mismatch')) {
-    return 'mismatch';
+  for (const issue of issues) {
+    const segments = issue.fieldPath.split('.');
+    const fieldPath =
+      (segments[0] === 'items' || segments[0] === 'adjustments') &&
+      segments.length > 2
+        ? segments.slice(0, 2).join('.')
+        : issue.fieldPath;
+    const current = states.get(fieldPath);
+
+    if (issue.state === 'mismatch' || !current) {
+      states.set(fieldPath, issue.state);
+    }
   }
-  if (relevant.length > 0) {
-    return 'review';
-  }
-  return 'verified';
+
+  return states;
 }

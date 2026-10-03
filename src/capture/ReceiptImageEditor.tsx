@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 import { assessReceiptImageQuality } from './ImageQualityGate';
+import { removePrivateReceiptImage } from './ReceiptImageStore';
 import {
   adjustCropCorner,
   FULL_IMAGE_CROP,
@@ -58,9 +59,7 @@ export function ReceiptImageEditor({
   const [crop, setCrop] = useState<NormalizedCrop>(FULL_IMAGE_CROP);
   const [container, setContainer] = useState({ width: 0, height: 0 });
   const [checks, setChecks] = useState<ManualQualityChecks>({
-    sharpText: false,
-    evenLighting: false,
-    fullyVisible: false,
+    readableAndComplete: false,
   });
   const [issues, setIssues] = useState<QualityIssue[]>([]);
   const [busy, setBusy] = useState(false);
@@ -100,10 +99,15 @@ export function ReceiptImageEditor({
     setBusy(true);
     setError(null);
     try {
+      const previousUri = image.uri;
       const rotated = await rotateReceiptImage(image, degrees);
       setImage(rotated);
       setCrop(FULL_IMAGE_CROP);
       setIssues([]);
+
+      if (previousUri !== rotated.uri) {
+        removePrivateReceiptImage(previousUri);
+      }
     } catch (cause) {
       setError(messageFromError(cause, 'Could not rotate this receipt image.'));
     } finally {
@@ -118,21 +122,39 @@ export function ReceiptImageEditor({
 
     setBusy(true);
     setError(null);
+    let prepared: PreparedReceiptImage | null = null;
+
     try {
-      const prepared = await prepareReceiptImage(image, { crop });
+      prepared = await prepareReceiptImage(image, { crop });
       const assessment = assessReceiptImageQuality(prepared, checks);
       setIssues(assessment.issues);
 
       if (!assessment.canContinue) {
+        if (prepared.uri !== image.uri) {
+          removePrivateReceiptImage(prepared.uri);
+        }
         return;
       }
 
       await onReady(prepared);
+
+      if (prepared.uri !== image.uri) {
+        removePrivateReceiptImage(prepared.uri);
+      }
+      removePrivateReceiptImage(image.uri);
     } catch (cause) {
+      if (prepared && prepared.uri !== image.uri) {
+        removePrivateReceiptImage(prepared.uri);
+      }
       setError(messageFromError(cause, 'Could not prepare this receipt image.'));
     } finally {
       setBusy(false);
     }
+  }
+
+  function cancel() {
+    removePrivateReceiptImage(image.uri);
+    onCancel();
   }
 
   return (
@@ -144,12 +166,12 @@ export function ReceiptImageEditor({
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
           <Text style={styles.eyebrow}>PREPARE RECEIPT</Text>
-          <Text style={styles.title}>Keep only the readable receipt.</Text>
+          <Text style={styles.title}>Crop receipt</Text>
         </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Cancel receipt editing"
-          onPress={onCancel}
+          onPress={cancel}
           style={styles.linkButton}
           disabled={busy}
         >
@@ -158,8 +180,7 @@ export function ReceiptImageEditor({
       </View>
 
       <Text style={styles.instructions}>
-        Drag the four corners around the full receipt. Keep the store name, every item,
-        and the final total inside the frame.
+        Keep the store name, all items, and final total inside the frame.
       </Text>
 
       <View style={styles.imageStage} onLayout={handleLayout}>
@@ -255,34 +276,12 @@ export function ReceiptImageEditor({
 
       <View style={styles.checkCard}>
         <Text style={styles.sectionTitle}>Photo check</Text>
-        <Text style={styles.sectionHint}>
-          Confirm what the app cannot safely infer from pixels alone. These checks
-          keep visibly unreadable images from being treated as reliable input.
-        </Text>
         <QualityCheck
-          checked={checks.sharpText}
-          label="Item names and prices look sharp"
-          onPress={() =>
-            setChecks((current) => ({ ...current, sharpText: !current.sharpText }))
-          }
-        />
-        <QualityCheck
-          checked={checks.evenLighting}
-          label="Printed text is not hidden by glare or dark shadow"
+          checked={checks.readableAndComplete}
+          label="Text is clear and the full receipt is visible"
           onPress={() =>
             setChecks((current) => ({
-              ...current,
-              evenLighting: !current.evenLighting,
-            }))
-          }
-        />
-        <QualityCheck
-          checked={checks.fullyVisible}
-          label="Store header, item rows, and final total are all visible"
-          onPress={() =>
-            setChecks((current) => ({
-              ...current,
-              fullyVisible: !current.fullyVisible,
+              readableAndComplete: !current.readableAndComplete,
             }))
           }
         />
@@ -314,14 +313,14 @@ export function ReceiptImageEditor({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Prepare receipt for offline text recognition"
+        accessibilityLabel="Continue with this prepared receipt"
         onPress={prepare}
         style={[styles.primaryButton, busy && styles.disabledButton]}
         disabled={busy}
       >
         {busy ? <ActivityIndicator color="#FFFFFF" /> : null}
         <Text style={styles.primaryButtonText}>
-          {busy ? 'Preparing receipt…' : 'Prepare for text recognition'}
+          {busy ? 'Preparing…' : 'Continue'}
         </Text>
       </Pressable>
     </ScrollView>

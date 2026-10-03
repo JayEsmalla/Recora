@@ -44,27 +44,12 @@ export function assessReceiptImageQuality(
     });
   }
 
-  if (!manual.sharpText) {
+  if (!manual.readableAndComplete) {
     issues.push({
-      code: 'blur-confirmation',
+      code: 'readability-confirmation',
       severity: 'blocker',
-      message: 'Text must look sharp enough to read. Retake the photo if item names or prices are blurry.',
-    });
-  }
-
-  if (!manual.evenLighting) {
-    issues.push({
-      code: 'lighting-confirmation',
-      severity: 'blocker',
-      message: 'Avoid dark shadows, glare, and overexposed areas across the printed text.',
-    });
-  }
-
-  if (!manual.fullyVisible) {
-    issues.push({
-      code: 'framing-confirmation',
-      severity: 'blocker',
-      message: 'The full receipt, including the header and final total, must be inside the crop.',
+      message:
+        'Confirm that text is sharp, lighting is clear, and the full receipt including the final total is visible.',
     });
   }
 

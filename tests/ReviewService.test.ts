@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { migrateDatabase } from '../src/data/database/migrations';
 import { OcrRepository } from '../src/data/repositories/OcrRepository';
@@ -61,8 +61,11 @@ describe('ReviewService', () => {
     expect(stored?.receipt.rawOcrText).toBe(fixtureDocument().rawText);
   });
 
-  it('restores corrected review values instead of reparsing over them', async () => {
+  it('restores corrected review values without reloading full OCR observations', async () => {
+    const getForReceipt = vi.spyOn(ocr, 'getForReceipt');
     const first = await service.load('receipt-1', now);
+    getForReceipt.mockClear();
+
     first.draft.merchantName = 'Corrected Store';
     first.draft.items[0]!.rawName = 'Corrected Milk';
 
@@ -75,6 +78,7 @@ describe('ReviewService', () => {
     );
     const recovered = await restarted.load('receipt-1', now);
 
+    expect(getForReceipt).not.toHaveBeenCalled();
     expect(recovered.draft.merchantName).toBe('Corrected Store');
     expect(recovered.draft.items[0]?.rawName).toBe('Corrected Milk');
     expect(recovered.rawOcrText).toContain('STORE');

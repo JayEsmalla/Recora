@@ -22,9 +22,7 @@ export interface PreparedReceiptImage {
 }
 
 export interface ManualQualityChecks {
-  sharpText: boolean;
-  evenLighting: boolean;
-  fullyVisible: boolean;
+  readableAndComplete: boolean;
 }
 
 export type QualitySeverity = 'warning' | 'blocker';
@@ -35,9 +33,7 @@ export interface QualityIssue {
     | 'tiny-image'
     | 'extreme-compression'
     | 'very-long-receipt'
-    | 'blur-confirmation'
-    | 'lighting-confirmation'
-    | 'framing-confirmation';
+    | 'readability-confirmation';
   severity: QualitySeverity;
   message: string;
 }

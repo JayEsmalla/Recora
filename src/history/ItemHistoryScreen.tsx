@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -23,6 +24,9 @@ export function ItemHistoryScreen({
     summary.identity.normalizedName ||
     summary.identity.rawName ||
     'Item history';
+  const [visiblePointCount, setVisiblePointCount] = useState(
+    Math.min(40, summary.points.length),
+  );
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -34,10 +38,6 @@ export function ItemHistoryScreen({
       </View>
 
       <Text style={styles.title}>{title}</Text>
-      <Text style={styles.body}>
-        These entries come only from reviewed and accepted receipts stored on this
-        device.
-      </Text>
 
       <View style={styles.summaryRow}>
         <SummaryBox
@@ -61,12 +61,10 @@ export function ItemHistoryScreen({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Price and purchase history</Text>
-        <Text style={styles.sectionHint}>
-          Tap any entry to reopen the source receipt.
-        </Text>
+        <Text style={styles.sectionTitle}>Price history</Text>
+        <Text style={styles.sectionHint}>Tap an entry to open its receipt.</Text>
 
-        {summary.points.map((point, index) => (
+        {summary.points.slice(0, visiblePointCount).map((point) => (
           <Pressable
             key={point.lineItemId}
             accessibilityRole="button"
@@ -98,23 +96,36 @@ export function ItemHistoryScreen({
             </View>
           </Pressable>
         ))}
+
+        {visiblePointCount < summary.points.length ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              setVisiblePointCount((current) =>
+                Math.min(summary.points.length, current + 40),
+              )
+            }
+            style={styles.loadMoreButton}
+          >
+            <Text style={styles.loadMoreText}>
+              Show more · {summary.points.length - visiblePointCount} remaining
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {summary.identity.normalizedName ? (
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>Grouped identity</Text>
           <Text style={styles.infoText}>
-            Different receipt descriptions are grouped here only because they were
-            explicitly assigned to “{summary.identity.normalizedName}”. The original
-            descriptions remain attached to each receipt.
+            Explicitly grouped as “{summary.identity.normalizedName}”. Original receipt names are preserved.
           </Text>
         </View>
       ) : (
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>Raw-description history</Text>
           <Text style={styles.infoText}>
-            This history uses an exact case-insensitive receipt description because
-            the item has not been assigned an organized identity yet.
+            Uses the exact receipt name until you assign an organized identity.
           </Text>
         </View>
       )}
@@ -240,6 +251,8 @@ const styles = StyleSheet.create({
   price: { color: '#1F2321', fontSize: 13, fontWeight: '900' },
   priceLabel: { color: '#858A86', fontSize: 9, marginTop: 2 },
   chevron: { color: '#858A86', fontSize: 18, marginTop: 3 },
+  loadMoreButton: { minHeight: 44, marginTop: 10, borderRadius: 11, borderWidth: 1, borderColor: '#C6CBC7', alignItems: 'center', justifyContent: 'center' },
+  loadMoreText: { color: '#2D5145', fontSize: 11, fontWeight: '900' },
   infoCard: {
     marginTop: 16,
     padding: 14,

@@ -15,13 +15,14 @@ export function computeReceiptConfidence(
   observations: ObservationConfidenceMap = new Map(),
 ): FieldConfidence[] {
   const fields: FieldConfidence[] = [];
+  const issuesByField = indexIssuesByField(issues);
 
   fields.push(
     assessField(
       'receipt.merchant',
       candidate.merchant?.observationIds ?? [],
       candidate.merchant ? 7200 : 2500,
-      issues,
+      issuesByField.get('receipt.merchant') ?? [],
       observations,
     ),
   );
@@ -35,7 +36,7 @@ export function computeReceiptConfidence(
           ? 3800
           : 8200
         : 2500,
-      issues,
+      issuesByField.get('receipt.date') ?? [],
       observations,
     ),
   );
@@ -45,7 +46,7 @@ export function computeReceiptConfidence(
       'receipt.subtotal',
       candidate.summary.subtotalSourceIds,
       candidate.summary.subtotalMinor === null ? 5200 : 8200,
-      issues,
+      issuesByField.get('receipt.subtotal') ?? [],
       observations,
     ),
   );
@@ -55,7 +56,7 @@ export function computeReceiptConfidence(
       'receipt.total',
       candidate.summary.totalSourceIds,
       candidate.summary.totalMinor === null ? 1800 : 8600,
-      issues,
+      issuesByField.get('receipt.total') ?? [],
       observations,
     ),
   );
@@ -76,7 +77,7 @@ export function computeReceiptConfidence(
         fieldPath,
         item.observationIds,
         base,
-        issues,
+        issuesByField.get(fieldPath) ?? [],
         observations,
       ),
     );
@@ -88,7 +89,7 @@ export function computeReceiptConfidence(
         `adjustments.${adjustment.id}`,
         adjustment.observationIds,
         7600,
-        issues,
+        issuesByField.get(`adjustments.${adjustment.id}`) ?? [],
         observations,
       ),
     );
@@ -101,7 +102,7 @@ function assessField(
   fieldPath: string,
   observationIds: readonly string[],
   structuralBase: number,
-  issues: readonly ValidationIssue[],
+  fieldIssues: readonly ValidationIssue[],
   observations: ObservationConfidenceMap,
 ): FieldConfidence {
   const reasons: ConfidenceReason[] = [
@@ -133,12 +134,6 @@ function assessField(
     });
   }
 
-  const fieldIssues = issues.filter(
-    (issue) =>
-      issue.fieldPath === fieldPath ||
-      issue.fieldPath.startsWith(`${fieldPath}.`),
-  );
-
   for (const issue of fieldIssues) {
     const delta = issue.state === 'mismatch' ? -3500 : -1800;
     score += delta;
@@ -164,6 +159,34 @@ function assessField(
     ocrConfidenceBasisPoints,
     reasons,
   };
+}
+
+function indexIssuesByField(
+  issues: readonly ValidationIssue[],
+): Map<string, ValidationIssue[]> {
+  const indexed = new Map<string, ValidationIssue[]>();
+
+  for (const issue of issues) {
+    const segments = issue.fieldPath.split('.');
+    const paths = [issue.fieldPath];
+
+    if (segments[0] === 'items' && segments.length > 2) {
+      paths.push(segments.slice(0, 2).join('.'));
+    } else if (segments[0] === 'adjustments' && segments.length > 2) {
+      paths.push(segments.slice(0, 2).join('.'));
+    }
+
+    for (const path of paths) {
+      const existing = indexed.get(path);
+      if (existing) {
+        existing.push(issue);
+      } else {
+        indexed.set(path, [issue]);
+      }
+    }
+  }
+
+  return indexed;
 }
 
 function normalizeOcrConfidence(value: number): number {

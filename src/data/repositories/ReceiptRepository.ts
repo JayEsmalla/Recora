@@ -5,7 +5,17 @@ import type {
   TransactionType,
   ValidationState,
 } from '../../domain/receipt';
-import type { DatabaseConnection } from '../database/DatabaseConnection';
+import type {
+  DatabaseConnection,
+  DatabaseValue,
+} from '../database/DatabaseConnection';
+
+export interface UnfinishedReceiptSummary {
+  id: string;
+  status: ReceiptStatus;
+  hasOcrText: boolean;
+  updatedAt: string;
+}
 
 export interface CreateReceiptDraftInput {
   id: string;
@@ -132,18 +142,24 @@ export class ReceiptRepository {
       return null;
     }
 
+    return this.getReviewDataForReceipt(receipt);
+  }
+
+  async getReviewDataForReceipt(
+    receipt: Receipt,
+  ): Promise<StoredReceiptReview> {
     const [lineRows, adjustmentRows] = await Promise.all([
       this.database.all<LineItemRow>(
         `SELECT * FROM line_items
          WHERE receipt_id = ?
          ORDER BY position ASC;`,
-        [id],
+        [receipt.id],
       ),
       this.database.all<AdjustmentRow>(
         `SELECT * FROM receipt_adjustments
          WHERE receipt_id = ?
          ORDER BY position ASC;`,
-        [id],
+        [receipt.id],
       ),
     ]);
 
@@ -164,16 +180,35 @@ export class ReceiptRepository {
     return rows.map((row) => row.image_uri);
   }
 
-  async listUnfinished(limit = 20): Promise<Receipt[]> {
+  async listUnfinished(limit = 20): Promise<UnfinishedReceiptSummary[]> {
     const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-    const rows = await this.database.all<ReceiptRow>(
-      `SELECT * FROM receipts
+    const rows = await this.database.all<{
+      id: string;
+      status: ReceiptStatus;
+      has_ocr_text: number;
+      updated_at: string;
+    }>(
+      `SELECT
+         id,
+         status,
+         CASE
+           WHEN raw_ocr_text IS NOT NULL AND length(raw_ocr_text) > 0 THEN 1
+           ELSE 0
+         END AS has_ocr_text,
+         updated_at
+       FROM receipts
        WHERE status IN ('draft', 'processing', 'review')
        ORDER BY updated_at DESC
        LIMIT ?;`,
       [safeLimit],
     );
-    return rows.map(mapReceipt);
+
+    return rows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      hasOcrText: row.has_ocr_text === 1,
+      updatedAt: row.updated_at,
+    }));
   }
 
   async setStatus(id: string, status: ReceiptStatus, now: string): Promise<void> {
@@ -295,48 +330,79 @@ async function writeReviewData(
     input.receiptId,
   ]);
 
-  for (const item of input.lineItems) {
+  await insertLineItemChunks(transaction, input);
+  await insertAdjustmentChunks(transaction, input);
+}
+
+async function insertLineItemChunks(
+  transaction: DatabaseConnection,
+  input: ReplaceReviewDataInput,
+): Promise<void> {
+  // 14 values per row. 60 rows stays below the common SQLite 999-parameter
+  // ceiling and avoids one native bridge round-trip per receipt item.
+  const chunkSize = 60;
+
+  for (let offset = 0; offset < input.lineItems.length; offset += chunkSize) {
+    const chunk = input.lineItems.slice(offset, offset + chunkSize);
+    const placeholders = chunk
+      .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .join(', ');
+    const params: DatabaseValue[] = chunk.flatMap((item) => [
+      item.id,
+      input.receiptId,
+      item.position,
+      item.rawName,
+      item.normalizedItemId ?? null,
+      item.categoryId ?? null,
+      item.quantityMilli ?? null,
+      item.rawQuantityText ?? null,
+      item.unitPriceMinor ?? null,
+      item.lineTotalMinor ?? null,
+      item.confidenceBasisPoints ?? null,
+      item.reviewState ?? 'review',
+      input.now,
+      input.now,
+    ]);
+
     await transaction.run(
       `INSERT INTO line_items (
         id, receipt_id, position, raw_name, normalized_item_id, category_id,
         quantity_milli, raw_quantity_text, unit_price_minor, line_total_minor,
         confidence_basis_points, review_state, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-      [
-        item.id,
-        input.receiptId,
-        item.position,
-        item.rawName,
-        item.normalizedItemId ?? null,
-        item.categoryId ?? null,
-        item.quantityMilli ?? null,
-        item.rawQuantityText ?? null,
-        item.unitPriceMinor ?? null,
-        item.lineTotalMinor ?? null,
-        item.confidenceBasisPoints ?? null,
-        item.reviewState ?? 'review',
-        input.now,
-        input.now,
-      ],
+      ) VALUES ${placeholders};`,
+      params,
     );
   }
+}
 
-  for (const adjustment of input.adjustments) {
+async function insertAdjustmentChunks(
+  transaction: DatabaseConnection,
+  input: ReplaceReviewDataInput,
+): Promise<void> {
+  const chunkSize = 100;
+
+  for (let offset = 0; offset < input.adjustments.length; offset += chunkSize) {
+    const chunk = input.adjustments.slice(offset, offset + chunkSize);
+    const placeholders = chunk
+      .map(() => '(?, ?, ?, ?, ?, ?, ?, ?)')
+      .join(', ');
+    const params: DatabaseValue[] = chunk.flatMap((adjustment) => [
+      adjustment.id,
+      input.receiptId,
+      adjustment.position,
+      adjustment.kind,
+      adjustment.label,
+      adjustment.amountMinor,
+      adjustment.confidenceBasisPoints ?? null,
+      adjustment.reviewState ?? 'review',
+    ]);
+
     await transaction.run(
       `INSERT INTO receipt_adjustments (
         id, receipt_id, position, kind, label, amount_minor,
         confidence_basis_points, review_state
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-      [
-        adjustment.id,
-        input.receiptId,
-        adjustment.position,
-        adjustment.kind,
-        adjustment.label,
-        adjustment.amountMinor,
-        adjustment.confidenceBasisPoints ?? null,
-        adjustment.reviewState ?? 'review',
-      ],
+      ) VALUES ${placeholders};`,
+      params,
     );
   }
 }

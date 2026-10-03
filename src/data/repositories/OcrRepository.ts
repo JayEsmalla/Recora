@@ -68,29 +68,11 @@ export class OcrRepository {
         ],
       );
 
-      for (const observation of observations) {
-        await transaction.run(
-          `INSERT INTO ocr_observations (
-            id, ocr_run_id, parent_id, kind, position, text,
-            x, y, width, height, confidence
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-          [
-            persistedObservationId(runId, observation.id),
-            runId,
-            observation.parentId
-              ? persistedObservationId(runId, observation.parentId)
-              : null,
-            observation.kind,
-            observation.position,
-            observation.text,
-            observation.frame.x,
-            observation.frame.y,
-            observation.frame.width,
-            observation.frame.height,
-            observation.confidence,
-          ],
-        );
-      }
+      await insertObservationChunks(
+        transaction,
+        runId,
+        observations,
+      );
 
       const update = await transaction.run(
         'UPDATE receipts SET raw_ocr_text = ?, updated_at = ? WHERE id = ?;',
@@ -209,6 +191,47 @@ function flattenDocument(document: OcrDocument): StoredOcrObservation[] {
   });
 
   return observations;
+}
+
+async function insertObservationChunks(
+  database: DatabaseConnection,
+  runId: string,
+  observations: readonly StoredOcrObservation[],
+): Promise<void> {
+  // 11 bound values per row. A conservative chunk of 75 stays under the
+  // common SQLite parameter ceiling while drastically reducing native bridge
+  // round-trips for long receipts.
+  const chunkSize = 75;
+
+  for (let offset = 0; offset < observations.length; offset += chunkSize) {
+    const chunk = observations.slice(offset, offset + chunkSize);
+    const placeholders = chunk
+      .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .join(', ');
+    const params = chunk.flatMap((observation) => [
+      persistedObservationId(runId, observation.id),
+      runId,
+      observation.parentId
+        ? persistedObservationId(runId, observation.parentId)
+        : null,
+      observation.kind,
+      observation.position,
+      observation.text,
+      observation.frame.x,
+      observation.frame.y,
+      observation.frame.width,
+      observation.frame.height,
+      observation.confidence,
+    ]);
+
+    await database.run(
+      `INSERT INTO ocr_observations (
+        id, ocr_run_id, parent_id, kind, position, text,
+        x, y, width, height, confidence
+      ) VALUES ${placeholders};`,
+      params,
+    );
+  }
 }
 
 function mapObservation(

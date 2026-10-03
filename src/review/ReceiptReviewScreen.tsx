@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -48,6 +48,8 @@ const ADJUSTMENT_KINDS: readonly AdjustmentKind[] = [
   'other',
 ];
 
+const ITEM_RENDER_BATCH = 25;
+
 export function ReceiptReviewScreen({
   initialSession,
   onSaveDraft,
@@ -58,6 +60,12 @@ export function ReceiptReviewScreen({
   const [draft, setDraft] = useState(initialSession.draft);
   const [acknowledgeReview, setAcknowledgeReview] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [visibleItemCount, setVisibleItemCount] = useState(
+    Math.min(ITEM_RENDER_BATCH, initialSession.draft.items.length),
+  );
+  const [pendingIssueAnchor, setPendingIssueAnchor] = useState<string | null>(
+    null,
+  );
   const [busyAction, setBusyAction] = useState<
     'draft' | 'accept' | 'discard' | null
   >(null);
@@ -66,7 +74,12 @@ export function ReceiptReviewScreen({
   const scrollRef = useRef<ScrollView | null>(null);
   const anchors = useRef<Record<string, number>>({});
 
-  const evaluation = useMemo(() => evaluateReviewDraft(draft), [draft]);
+  const deferredDraft = useDeferredValue(draft);
+  const evaluation = useMemo(
+    () => evaluateReviewDraft(deferredDraft),
+    [deferredDraft],
+  );
+  const validationPending = deferredDraft !== draft;
 
   function updateDraft(next: ReviewDraft) {
     setDraft(next);
@@ -80,7 +93,8 @@ export function ReceiptReviewScreen({
       return;
     }
 
-    if (evaluation.inputErrors.length > 0) {
+    const currentEvaluation = evaluateReviewDraft(draft);
+    if (currentEvaluation.inputErrors.length > 0) {
       setError('Correct invalid input values before saving this review draft.');
       return;
     }
@@ -90,7 +104,7 @@ export function ReceiptReviewScreen({
     try {
       const session = await onSaveDraft(draft);
       setDraft(session.draft);
-      setNotice('Review draft saved locally. You can safely continue later.');
+      setNotice('Review draft saved locally.');
     } catch (cause) {
       setError(messageFromError(cause, 'Could not save this review draft.'));
     } finally {
@@ -103,7 +117,8 @@ export function ReceiptReviewScreen({
       return;
     }
 
-    if (evaluation.inputErrors.length > 0) {
+    const currentEvaluation = evaluateReviewDraft(draft);
+    if (currentEvaluation.inputErrors.length > 0) {
       setError('Correct invalid input values before saving this receipt.');
       return;
     }
@@ -135,11 +150,40 @@ export function ReceiptReviewScreen({
     }
   }
 
-  function registerAnchor(fieldPath: string, event: LayoutChangeEvent) {
-    anchors.current[fieldPath] = event.nativeEvent.layout.y;
+  function registerAnchor(
+    fieldPath: string,
+    event: LayoutChangeEvent,
+    parentPath?: string,
+  ) {
+    const parentY = parentPath ? anchors.current[parentPath] ?? 0 : 0;
+    const y = parentY + event.nativeEvent.layout.y;
+    anchors.current[fieldPath] = y;
+
+    if (pendingIssueAnchor === fieldPath) {
+      setPendingIssueAnchor(null);
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, y - 18),
+        animated: true,
+      });
+    }
   }
 
   function jumpToIssue(issue: ValidationIssue) {
+    const parts = issue.fieldPath.split('.');
+
+    if (parts[0] === 'items' && parts[1]) {
+      const itemIndex = draft.items.findIndex((item) => item.id === parts[1]);
+      if (itemIndex >= visibleItemCount) {
+        setPendingIssueAnchor(`items.${parts[1]}`);
+        setVisibleItemCount(itemIndex + 1);
+        return;
+      }
+    }
+
+    scrollToIssue(issue);
+  }
+
+  function scrollToIssue(issue: ValidationIssue) {
     const exact = anchors.current[issue.fieldPath];
     const parts = issue.fieldPath.split('.');
     const parent =
@@ -154,6 +198,7 @@ export function ReceiptReviewScreen({
   }
 
   const canAccept =
+    !validationPending &&
     evaluation.inputErrors.length === 0 &&
     evaluation.validation.state !== 'mismatch' &&
     (evaluation.validation.state !== 'review' || acknowledgeReview);
@@ -172,10 +217,9 @@ export function ReceiptReviewScreen({
         <Text style={styles.eyebrow}>REVIEW RECEIPT</Text>
       </View>
 
-      <Text style={styles.title}>Confirm what Recora reconstructed.</Text>
+      <Text style={styles.title}>Review receipt</Text>
       <Text style={styles.body}>
-        Correct uncertain fields before saving. Your edits change the organized
-        record, not the retained receipt image or raw OCR evidence.
+        Correct highlighted fields. Original image and OCR evidence stay unchanged.
       </Text>
 
       <StatusCard
@@ -234,7 +278,11 @@ export function ReceiptReviewScreen({
       >
         <Text style={styles.sectionTitle}>Receipt details</Text>
 
-        <View onLayout={(event) => registerAnchor('receipt.merchant', event)}>
+        <View
+          onLayout={(event) =>
+            registerAnchor('receipt.merchant', event, 'receipt')
+          }
+        >
           <FieldLabel label="Merchant" />
           <TextInput
             accessibilityLabel="Merchant name"
@@ -247,7 +295,11 @@ export function ReceiptReviewScreen({
           />
         </View>
 
-        <View onLayout={(event) => registerAnchor('receipt.date', event)}>
+        <View
+          onLayout={(event) =>
+            registerAnchor('receipt.date', event, 'receipt')
+          }
+        >
           <FieldLabel
             label="Purchase date / time"
             hint="Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS"
@@ -289,9 +341,20 @@ export function ReceiptReviewScreen({
           ))}
         </View>
 
-        <View style={styles.moneyRow}>
+        <View
+          onLayout={(event) =>
+            registerAnchor('receipt.amounts', event, 'receipt')
+          }
+          style={styles.moneyRow}
+        >
           <View
-            onLayout={(event) => registerAnchor('receipt.subtotal', event)}
+            onLayout={(event) =>
+              registerAnchor(
+                'receipt.subtotal',
+                event,
+                'receipt.amounts',
+              )
+            }
             style={styles.moneyColumn}
           >
             <EditableAmount
@@ -303,7 +366,13 @@ export function ReceiptReviewScreen({
             />
           </View>
           <View
-            onLayout={(event) => registerAnchor('receipt.total', event)}
+            onLayout={(event) =>
+              registerAnchor(
+                'receipt.total',
+                event,
+                'receipt.amounts',
+              )
+            }
             style={styles.moneyColumn}
           >
             <EditableAmount
@@ -315,7 +384,10 @@ export function ReceiptReviewScreen({
         </View>
       </View>
 
-      <View style={styles.card}>
+      <View
+        onLayout={(event) => registerAnchor('items', event)}
+        style={styles.card}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionHeaderCopy}>
             <Text style={styles.sectionTitle}>Items</Text>
@@ -326,7 +398,7 @@ export function ReceiptReviewScreen({
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
+            onPress={() => {
               updateDraft({
                 ...draft,
                 items: [
@@ -336,8 +408,9 @@ export function ReceiptReviewScreen({
                     draft.items.length,
                   ),
                 ],
-              })
-            }
+              });
+              setVisibleItemCount(draft.items.length + 1);
+            }}
             style={styles.smallButton}
           >
             <Text style={styles.smallButtonText}>+ Item</Text>
@@ -348,12 +421,14 @@ export function ReceiptReviewScreen({
           <Text style={styles.emptyText}>No items. Add at least one item before saving.</Text>
         ) : null}
 
-        {draft.items.map((item, index) => {
+        {draft.items.slice(0, visibleItemCount).map((item, index) => {
           const fieldPath = `items.${item.id}`;
           return (
             <View
               key={item.id}
-              onLayout={(event) => registerAnchor(fieldPath, event)}
+              onLayout={(event) =>
+                registerAnchor(fieldPath, event, 'items')
+              }
               style={styles.itemCard}
             >
               <View style={styles.itemHeader}>
@@ -441,15 +516,33 @@ export function ReceiptReviewScreen({
             </View>
           );
         })}
+
+        {visibleItemCount < draft.items.length ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              setVisibleItemCount((current) =>
+                Math.min(draft.items.length, current + ITEM_RENDER_BATCH),
+              )
+            }
+            style={styles.loadMoreButton}
+          >
+            <Text style={styles.loadMoreButtonText}>
+              Show more items · {draft.items.length - visibleItemCount} remaining
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      <View style={styles.card}>
+      <View
+        onLayout={(event) => registerAnchor('adjustments', event)}
+        style={styles.card}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionHeaderCopy}>
             <Text style={styles.sectionTitle}>Discounts & charges</Text>
             <Text style={styles.sectionHint}>
-              Discounts should be negative. Taxes, service charges, and positive
-              adjustments should be positive.
+              Discounts negative; charges and taxes positive.
             </Text>
           </View>
           <Pressable
@@ -481,7 +574,9 @@ export function ReceiptReviewScreen({
           return (
             <View
               key={adjustment.id}
-              onLayout={(event) => registerAnchor(fieldPath, event)}
+              onLayout={(event) =>
+                registerAnchor(fieldPath, event, 'adjustments')
+              }
               style={styles.itemCard}
             >
               <View style={styles.itemHeader}>
@@ -640,10 +735,16 @@ export function ReceiptReviewScreen({
       <Pressable
         accessibilityRole="button"
         onPress={saveDraft}
-        disabled={busyAction !== null || evaluation.inputErrors.length > 0}
+        disabled={
+          busyAction !== null ||
+          validationPending ||
+          evaluation.inputErrors.length > 0
+        }
         style={[
           styles.secondaryButton,
-          (busyAction !== null || evaluation.inputErrors.length > 0) &&
+          (busyAction !== null ||
+            validationPending ||
+            evaluation.inputErrors.length > 0) &&
             styles.disabledButton,
         ]}
       >
@@ -865,6 +966,8 @@ const styles = StyleSheet.create({
   moneyColumn: { flex: 1 },
   smallButton: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#E6EFEA' },
   smallButtonText: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
+  loadMoreButton: { minHeight: 44, marginTop: 14, borderRadius: 11, borderWidth: 1, borderColor: '#C6CBC7', alignItems: 'center', justifyContent: 'center' },
+  loadMoreButtonText: { color: '#2D5145', fontSize: 12, fontWeight: '900' },
   emptyText: { color: '#797F7A', fontSize: 13, lineHeight: 19, marginTop: 12 },
   itemCard: { marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E4E5E1', backgroundColor: '#FCFCFA' },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

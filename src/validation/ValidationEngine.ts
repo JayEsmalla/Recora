@@ -128,14 +128,24 @@ function validateParserWarnings(
   candidate: ReceiptCandidate,
   issues: ValidationIssue[],
 ): void {
+  const itemByObservationId = new Map<string, ReceiptCandidate['items'][number]>();
+
+  for (const item of candidate.items) {
+    for (const observationId of item.observationIds) {
+      if (!itemByObservationId.has(observationId)) {
+        itemByObservationId.set(observationId, item);
+      }
+    }
+  }
+
   for (const warning of candidate.warnings) {
     if (warning.code === 'ambiguous-date') {
       continue;
     }
 
-    const duplicateItem = candidate.items.find((item) =>
-      item.observationIds.some((id) => warning.observationIds.includes(id)),
-    );
+    const duplicateItem = warning.observationIds
+      .map((id) => itemByObservationId.get(id))
+      .find((item) => item !== undefined);
 
     issues.push({
       code:
@@ -157,6 +167,11 @@ function validateLineItems(
   tolerance: number,
 ): void {
   const seen = new Map<string, string>();
+  const duplicateIssuePaths = new Set(
+    issues
+      .filter((issue) => issue.code === 'possible-duplicate-line')
+      .map((issue) => issue.fieldPath),
+  );
 
   for (const item of candidate.items) {
     const fieldPath = `items.${item.id}`;
@@ -187,14 +202,7 @@ function validateLineItems(
     ].join('|');
     const duplicateOf = seen.get(duplicateKey);
 
-    if (
-      duplicateOf &&
-      !issues.some(
-        (issue) =>
-          issue.code === 'possible-duplicate-line' &&
-          issue.fieldPath === fieldPath,
-      )
-    ) {
+    if (duplicateOf && !duplicateIssuePaths.has(fieldPath)) {
       issues.push({
         code: 'possible-duplicate-line',
         state: 'review',
@@ -259,13 +267,17 @@ function validateSummary(
     .map((item) => item.lineTotalMinor)
     .filter((value): value is number => value !== null);
 
+  const completeLineTotalSum =
+    lineTotals.length === candidate.items.length && candidate.items.length > 0
+      ? lineTotals.reduce((sum, value) => sum + value, 0)
+      : null;
+
   if (
     candidate.summary.subtotalMinor !== null &&
-    lineTotals.length === candidate.items.length &&
-    candidate.items.length > 0
+    completeLineTotalSum !== null
   ) {
     counters.subtotalChecks += 1;
-    const expectedSubtotal = lineTotals.reduce((sum, value) => sum + value, 0);
+    const expectedSubtotal = completeLineTotalSum;
 
     if (
       !withinTolerance(
@@ -292,10 +304,7 @@ function validateSummary(
   }
 
   const base =
-    candidate.summary.subtotalMinor ??
-    (lineTotals.length === candidate.items.length && candidate.items.length > 0
-      ? lineTotals.reduce((sum, value) => sum + value, 0)
-      : null);
+    candidate.summary.subtotalMinor ?? completeLineTotalSum;
 
   if (base === null) {
     return;

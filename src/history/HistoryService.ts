@@ -16,6 +16,8 @@ export interface HistoryOverview {
   categories: CategoryOption[];
 }
 
+export type HistoryLoadMode = 'receipts' | 'items' | 'both';
+
 export class HistoryService {
   constructor(
     private readonly repository: HistoryRepository,
@@ -24,11 +26,17 @@ export class HistoryService {
 
   async loadOverview(
     filters: HistoryFilters = {},
+    mode: HistoryLoadMode = 'both',
+    includeCategories = true,
   ): Promise<HistoryOverview> {
     const [receipts, items, categories] = await Promise.all([
-      this.repository.listReceipts(filters),
-      this.repository.searchItems(filters),
-      this.repository.listCategories(),
+      mode === 'items'
+        ? Promise.resolve([])
+        : this.repository.listReceipts(filters),
+      mode === 'receipts'
+        ? Promise.resolve([])
+        : this.repository.searchItems(filters),
+      includeCategories ? this.repository.listCategories() : Promise.resolve([]),
     ]);
 
     return { receipts, items, categories };
