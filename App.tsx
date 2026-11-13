@@ -5,13 +5,13 @@ import {
   ActivityIndicator,
   BackHandler,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import {
   captureReceiptWithCamera,
@@ -94,6 +94,14 @@ type AppScreen =
   | 'item-history';
 
 export default function App() {
+  return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <RecoraApp />
+    </SafeAreaProvider>
+  );
+}
+
+function RecoraApp() {
   const dimensions = useWindowDimensions();
   const layout = responsiveLayout(dimensions.width, dimensions.height, dimensions.fontScale);
   const [bootState, setBootState] = useState<BootState>('loading');

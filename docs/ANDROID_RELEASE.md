@@ -4,6 +4,7 @@
 
 The last mobile layout pass uses shared screen-size and system-font-scale rules in `src/ui/responsiveLayout.ts`. It covers Home, photo preparation, OCR and recovery pages, receipt review, receipt and item history, and accepted receipt detail screens.
 
+- The app root uses the native safe-area provider and inset-aware screen container, protecting Android edge-to-edge content from status bars, gesture navigation areas, and display cutouts.
 - The Home and recovery screens scroll when the screen is short or system text is large.
 - Horizontal padding adapts on 320–360dp phones, ordinary phones, and tablets.
 - Receipt review money/quantity fields, purchase history date filters, summary boxes and actions stack when required by the available width.
@@ -32,9 +33,9 @@ To create the test APK:
 eas build --platform android --profile preview --non-interactive
 ```
 
-To inspect the submitted preview build:
+To inspect the latest signed preview build:
 
-https://expo.dev/accounts/ywach/projects/recora/builds/aaac77f0-e977-4592-a848-e0b0e7b86105
+https://expo.dev/accounts/ywach/projects/recora/builds
 
 When it reaches `FINISHED`, download the binary from the build page's artifact link and install it on a test device. The cloud build generated and retains Android signing credentials in the Expo account; do not commit or publish private signing files.
 
