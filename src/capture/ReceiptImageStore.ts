@@ -7,6 +7,14 @@ const ROOT_DIRECTORY = 'recora';
 const RECEIPT_DIRECTORY = 'receipts';
 const STAGING_DIRECTORY = 'staging';
 
+// A copied receipt image is not yet represented in SQLite until the
+// caller completes createDraft/addPage. Startup pruning must not delete it.
+const pendingRetainedImageUris = new Set<string>();
+
+export function finishRetainingReceiptImage(uri: string): void {
+  pendingRetainedImageUris.delete(uri);
+}
+
 function ensureDirectories(): {
   receipts: Directory;
   staging: Directory;
@@ -51,7 +59,13 @@ export async function retainPreparedReceiptImage(
     `${receiptId}-page-${pagePosition}.jpg`,
   );
 
-  await sourceFile.copy(destination, { overwrite: false });
+  pendingRetainedImageUris.add(destination.uri);
+  try {
+    await sourceFile.copy(destination, { overwrite: false });
+  } catch (error) {
+    pendingRetainedImageUris.delete(destination.uri);
+    throw error;
+  }
 
   return {
     ...image,
@@ -61,6 +75,7 @@ export async function retainPreparedReceiptImage(
 }
 
 export function removePrivateReceiptImage(uri: string): boolean {
+  pendingRetainedImageUris.delete(uri);
   try {
     const file = new File(uri);
     if (file.exists) {
@@ -91,6 +106,7 @@ export function pruneOrphanedReceiptImages(
     selectOrphanedReceiptImageUris(
       entries.map((entry) => entry.uri),
       referencedUris,
+      [...pendingRetainedImageUris],
     ),
   );
   const removed: string[] = [];

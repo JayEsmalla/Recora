@@ -48,6 +48,35 @@ export interface SaveCorrectionRuleInput {
 export class HistoryRepository {
   constructor(private readonly database: DatabaseConnection) {}
 
+  transaction<T>(work: (repository: HistoryRepository) => Promise<T>): Promise<T> {
+    return this.database.transaction((connection) => work(new HistoryRepository(connection)));
+  }
+
+  async pendingMaintenanceReceiptIds(limit = 5): Promise<string[]> {
+    const rows = await this.database.all<{ receipt_id: string }>(
+      `SELECT j.receipt_id FROM receipt_maintenance_jobs j
+       JOIN receipts r ON r.id = j.receipt_id
+       WHERE r.status = 'accepted'
+       ORDER BY j.created_at ASC, j.receipt_id ASC LIMIT ?;`,
+      [boundedLimit(limit, 25)],
+    );
+    return rows.map((row) => row.receipt_id);
+  }
+
+  async markMaintenanceDone(receiptId: string): Promise<void> {
+    await this.database.run(
+      'DELETE FROM receipt_maintenance_jobs WHERE receipt_id = ?;',
+      [receiptId],
+    );
+  }
+
+  async recordMaintenanceAttempt(receiptId: string): Promise<void> {
+    await this.database.run(
+      'UPDATE receipt_maintenance_jobs SET last_attempt_at = ? WHERE receipt_id = ?;',
+      [new Date().toISOString(), receiptId],
+    );
+  }
+
   async listReceipts(
     filters: HistoryFilters = {},
   ): Promise<ReceiptHistoryEntry[]> {

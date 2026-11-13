@@ -19,6 +19,15 @@ describe('receipt image cleanup selection', () => {
     ]);
   });
 
+  it('protects an in-flight retained image before its SQLite row commits', () => {
+    const candidate = 'file:///recora/receipts/new-receipt-page-0.jpg';
+    expect(selectOrphanedReceiptImageUris(
+      [candidate, 'file:///recora/receipts/orphan.jpg'],
+      [],
+      [candidate],
+    )).toEqual(['file:///recora/receipts/orphan.jpg']);
+  });
+
   it('does not delete anything when every retained image is referenced', () => {
     const candidates = [
       'file:///recora/receipts/receipt-1.jpg',

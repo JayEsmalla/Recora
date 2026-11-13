@@ -70,6 +70,30 @@ describe('HistoryRepository', () => {
     database.close();
   });
 
+  it('retries durable post-accept organization after failure', async () => {
+    expect(await history.pendingMaintenanceReceiptIds()).toEqual([
+      'receipt-new', 'receipt-old',
+    ]);
+
+    const failingNormalization = new NormalizationService(history, () => {
+      throw new Error('injected organization failure');
+    });
+    const failingService = new HistoryService(history, failingNormalization);
+    expect(await failingService.processPendingMaintenance(1)).toEqual({
+      processed: 0, failed: 1,
+    });
+    expect(await history.pendingMaintenanceReceiptIds()).toHaveLength(2);
+
+    const restartedService = new HistoryService(
+      history,
+      new NormalizationService(history),
+    );
+    expect(await restartedService.processPendingMaintenance()).toEqual({
+      processed: 2, failed: 0,
+    });
+    expect(await history.pendingMaintenanceReceiptIds()).toEqual([]);
+  });
+
   it('loads only the active history mode when requested', async () => {
     const service = new HistoryService(
       history,
@@ -215,6 +239,14 @@ describe('HistoryRepository', () => {
       purchasedAt: input.purchasedAt,
       imageUri: 'file:///' + input.id + '.jpg',
       rawOcrText: 'RAW ' + input.id,
+      now,
+    });
+
+    await receipts.replaceReviewData({
+      receiptId: input.id,
+      validationState: 'review',
+      lineItems: [],
+      adjustments: [],
       now,
     });
 

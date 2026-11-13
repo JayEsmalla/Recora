@@ -80,8 +80,31 @@ export class HistoryService {
     return this.normalization.unlinkIdentity(lineItemId);
   }
 
-  applyKnownRules(receiptId: string): Promise<number> {
-    return this.normalization.applyKnownRules(receiptId);
+  async applyKnownRules(receiptId: string): Promise<number> {
+    const applied = await this.normalization.applyKnownRules(receiptId);
+    await this.repository.markMaintenanceDone(receiptId);
+    return applied;
+  }
+
+  async processPendingMaintenance(maxJobs = 5): Promise<{
+    processed: number;
+    failed: number;
+  }> {
+    const ids = await this.repository.pendingMaintenanceReceiptIds(maxJobs);
+    let processed = 0;
+    let failed = 0;
+    for (const receiptId of ids) {
+      try {
+        await this.applyKnownRules(receiptId);
+        processed += 1;
+      } catch {
+        failed += 1;
+        // Never block receipt access if optional organization fails.
+        // The retained job can be retried on a later app start.
+        await this.repository.recordMaintenanceAttempt(receiptId);
+      }
+    }
+    return { processed, failed };
   }
 
   resetRulesForReceipt(receiptId: string): Promise<number> {

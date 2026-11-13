@@ -127,17 +127,15 @@ export function ReceiptReviewScreen({
     }
 
     const currentEvaluation = evaluateReviewDraft(draft);
-    if (currentEvaluation.inputErrors.length > 0) {
-      setError('Correct invalid input values before saving this review draft.');
-      return;
-    }
 
     setBusyAction('draft');
     setError(null);
     try {
       const session = await onSaveDraft(draft);
       setDraft(session.draft);
-      setNotice('Review draft saved locally.');
+      setNotice(currentEvaluation.inputErrors.length > 0
+        ? 'Edits saved locally. Fix highlighted fields before saving the receipt.'
+        : 'Review draft saved locally.');
     } catch (cause) {
       setError(messageFromError(cause, 'Could not save this review draft.'));
     } finally {

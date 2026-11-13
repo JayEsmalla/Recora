@@ -18,7 +18,13 @@ export class NormalizationService {
     private readonly idFactory: (prefix: string) => string = createLocalId,
   ) {}
 
-  async assignIdentity(
+  assignIdentity(input: AssignItemIdentityInput): Promise<NormalizedItemOption> {
+    return this.history.transaction((history) =>
+      new NormalizationService(history, this.idFactory).assignIdentityInsideTransaction(input),
+    );
+  }
+
+  private async assignIdentityInsideTransaction(
     input: AssignItemIdentityInput,
   ): Promise<NormalizedItemOption> {
     const context = await this.history.getAcceptedLineItemContext(

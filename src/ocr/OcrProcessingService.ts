@@ -28,6 +28,18 @@ export interface ProcessReceiptOcrInput {
   onProgress?: (event: OcrProgressEvent) => void;
 }
 
+// Prevent simultaneous native OCR work on the same logical receipt, even
+// when separate service instances are created by navigation/retry handlers.
+const activeReceiptJobs = new Set<string>();
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const error = new Error('OCR processing was cancelled.');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
 export class OcrProcessingService {
   constructor(
     private readonly engine: OcrEngine,
@@ -36,6 +48,19 @@ export class OcrProcessingService {
   ) {}
 
   async process(input: ProcessReceiptOcrInput): Promise<StoredOcrRun> {
+    throwIfCancelled(input.signal);
+    if (activeReceiptJobs.has(input.receiptId)) {
+      throw new Error('This receipt is already being processed. Please finish or cancel the current scan.');
+    }
+    activeReceiptJobs.add(input.receiptId);
+    try {
+      return await this.processExclusive(input);
+    } finally {
+      activeReceiptJobs.delete(input.receiptId);
+    }
+  }
+
+  private async processExclusive(input: ProcessReceiptOcrInput): Promise<StoredOcrRun> {
     const startedAt = Date.now();
     const emit = (
       stage: OcrProgressStage,
@@ -89,9 +114,11 @@ export class OcrProcessingService {
       throw new Error('A receipt can contain at most 5 photos.');
     }
 
+    throwIfCancelled(input.signal);
     const documents: OcrDocument[] = [];
 
     for (let index = 0; index < pages.length; index += 1) {
+      throwIfCancelled(input.signal);
       const page = pages[index]!;
       emit('recognizing-text', index, pages.length);
 
@@ -116,11 +143,13 @@ export class OcrProcessingService {
 
     const safeDocument = mergeOcrDocuments(documents);
 
+    throwIfCancelled(input.signal);
     emit('persisting-evidence', pages.length - 1, pages.length);
     const stored = await this.ocr.replaceForReceipt(
       input.receiptId,
       safeDocument,
       input.now ?? new Date().toISOString(),
+      { expectedPageUris: pages.map((page) => page.imageUri), signal: input.signal },
     );
 
     emit('complete');

@@ -91,12 +91,25 @@ describe('ReviewService', () => {
     const session = await service.load('receipt-1', now);
     session.draft.totalText = 'not money';
 
-    await expect(
-      service.saveDraft('receipt-1', session.draft, now),
-    ).rejects.toThrow('Correct invalid review fields');
+    const saved = await service.saveDraft('receipt-1', session.draft, now);
+    expect(saved.evaluation.inputErrors.length).toBeGreaterThan(0);
 
     const stored = await receipts.getReviewData('receipt-1');
     expect(stored?.receipt.totalMinor).toBe(8500);
+    expect(await receipts.getReviewEditBuffer('receipt-1')).toMatchObject({
+      totalText: 'not money',
+    });
+
+    const restarted = new ReviewService(receipts, ocr, new ParserProcessingService(ocr));
+    const recovered = await restarted.load('receipt-1', now);
+    expect(recovered.draft.totalText).toBe('not money');
+    await expect(
+      restarted.saveAccepted('receipt-1', recovered.draft, true, now),
+    ).rejects.toThrow('Correct invalid review fields');
+
+    recovered.draft.totalText = '85.00';
+    await restarted.saveDraft('receipt-1', recovered.draft, now);
+    expect(await receipts.getReviewEditBuffer('receipt-1')).toBeNull();
   });
 
   it('blocks final acceptance while a mismatch remains', async () => {

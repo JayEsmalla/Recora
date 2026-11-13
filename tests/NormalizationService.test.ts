@@ -36,6 +36,25 @@ describe('NormalizationService', () => {
     database.close();
   });
 
+  it('rolls back identity, merchant and rule changes on a late failure', async () => {
+    const failing = new NormalizationService(history, (prefix) => {
+      if (prefix === 'correction-rule') throw new Error('injected rule failure');
+      return prefix + '-failure-test';
+    });
+
+    await expect(failing.assignIdentity({
+      lineItemId: 'line-1',
+      canonicalName: 'Milk Atomic Identity',
+      rememberForMerchant: true,
+      now,
+    })).rejects.toThrow('injected rule failure');
+
+    const context = await history.getAcceptedLineItemContext('line-1');
+    expect(context?.normalizedItemId).toBeNull();
+    expect(context?.merchantId).toBeNull();
+    expect(await history.findNormalizedItemByName('Milk Atomic Identity')).toBeNull();
+  });
+
   it('assigns a canonical identity without overwriting the raw receipt description', async () => {
     const normalized = await normalization.assignIdentity({
       lineItemId: 'line-1',
@@ -219,6 +238,14 @@ describe('NormalizationService', () => {
       id,
       merchantRawName: merchant,
       purchasedAt,
+      now,
+    });
+
+    await receipts.replaceReviewData({
+      receiptId: id,
+      validationState: 'review',
+      lineItems: [],
+      adjustments: [],
       now,
     });
 

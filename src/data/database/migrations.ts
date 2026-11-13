@@ -281,6 +281,27 @@ WHERE image_uri IS NOT NULL
   AND image_height IS NOT NULL;
 `,
   },
+  {
+    version: 5,
+    name: 'durable_review_edits_and_post_accept_work',
+    sql: `
+CREATE TABLE IF NOT EXISTS review_edit_buffers (
+  receipt_id TEXT PRIMARY KEY NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+  draft_json TEXT NOT NULL CHECK(length(draft_json) <= 1048576),
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS receipt_maintenance_jobs (
+  receipt_id TEXT PRIMARY KEY NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'apply_merchant_rules'
+    CHECK(kind = 'apply_merchant_rules'),
+  created_at TEXT NOT NULL,
+  last_attempt_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_receipt_maintenance_created
+  ON receipt_maintenance_jobs(created_at);
+`,
+  },
 ];
 
 export async function migrateDatabase(database: DatabaseConnection): Promise<void> {

@@ -23,7 +23,7 @@ describe('database migrations', () => {
     const row = await database.first<{ count: number }>(
       'SELECT COUNT(*) AS count FROM schema_migrations;',
     );
-    expect(row?.count).toBe(4);
+    expect(row?.count).toBe(5);
   });
 
   it('installs ordered receipt-page storage with a five-photo limit', async () => {

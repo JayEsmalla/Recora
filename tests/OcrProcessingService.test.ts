@@ -151,6 +151,48 @@ describe('OcrProcessingService', () => {
     ]);
   });
 
+  it('prevents overlapping OCR jobs for the same receipt across service instances', async () => {
+    let releaseRecognition: ((document: OcrDocument) => void) | undefined;
+    const engine: OcrEngine = {
+      id: 'blocked',
+      recognize: () => new Promise<OcrDocument>((resolve) => {
+        releaseRecognition = resolve;
+      }),
+    };
+    const first = new OcrProcessingService(engine, receipts, ocr).process({
+      receiptId: 'receipt-1',
+    });
+    // Wait for the first run to enter the native recognition stage.
+    for (let attempt = 0; attempt < 20 && !releaseRecognition; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(releaseRecognition).toBeDefined();
+    await expect(
+      new OcrProcessingService(new FakeOcrEngine(fixture), receipts, ocr)
+        .process({ receiptId: 'receipt-1' }),
+    ).rejects.toThrow('already being processed');
+    releaseRecognition!(fixture);
+    await first;
+    expect((await ocr.getForReceipt('receipt-1'))?.rawText).toBe(fixture.rawText);
+  });
+
+  it('does not persist OCR for an outdated set of source photos', async () => {
+    const engine: OcrEngine = {
+      id: 'changing-photos',
+      async recognize() {
+        await receipts.addPage({
+          receiptId: 'receipt-1', imageUri: 'file:///private/new-page.jpg',
+          imageWidth: 500, imageHeight: 1000, now,
+        });
+        return fixture;
+      },
+    };
+    await expect(
+      new OcrProcessingService(engine, receipts, ocr).process({ receiptId: 'receipt-1' }),
+    ).rejects.toThrow('Receipt photos changed');
+    expect(await ocr.getForReceipt('receipt-1')).toBeNull();
+  });
+
   it('does not persist a cancelled OCR result', async () => {
     const controller = new AbortController();
     controller.abort();

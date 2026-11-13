@@ -22,6 +22,12 @@ export interface StoredOcrObservation {
   confidence: number | null;
 }
 
+function cancelledOcrError(): Error {
+  const error = new Error('OCR processing was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
 export class OcrRepository {
   constructor(private readonly database: DatabaseConnection) {}
 
@@ -29,13 +35,17 @@ export class OcrRepository {
     receiptId: string,
     document: OcrDocument,
     now: string,
+    options?: { expectedPageUris?: readonly string[]; signal?: AbortSignal },
   ): Promise<StoredOcrRun> {
     const runId = `ocr-${receiptId}`;
     const observations = flattenDocument(document);
 
     await this.database.transaction(async (transaction) => {
-      const receipt = await transaction.first<{ status: string }>(
-        'SELECT status FROM receipts WHERE id = ?;',
+      if (options?.signal?.aborted) {
+        throw cancelledOcrError();
+      }
+      const receipt = await transaction.first<{ status: string; image_uri: string | null }>(
+        'SELECT status, image_uri FROM receipts WHERE id = ?;',
         [receiptId],
       );
 
@@ -47,6 +57,20 @@ export class OcrRepository {
         throw new Error(
           'OCR evidence can only be replaced for an unreviewed receipt.',
         );
+      }
+
+      if (options?.expectedPageUris) {
+        const rows = await transaction.all<{ image_uri: string }>(
+          'SELECT image_uri FROM receipt_pages WHERE receipt_id = ? ORDER BY position ASC;',
+          [receiptId],
+        );
+        const currentUris = rows.length > 0
+          ? rows.map((row) => row.image_uri)
+          : receipt.image_uri ? [receipt.image_uri] : [];
+        if (currentUris.length !== options.expectedPageUris.length ||
+            currentUris.some((uri, index) => uri !== options.expectedPageUris?.[index])) {
+          throw new Error('Receipt photos changed during OCR. Please read the receipt again.');
+        }
       }
 
       await transaction.run('DELETE FROM ocr_runs WHERE receipt_id = ?;', [
@@ -74,6 +98,9 @@ export class OcrRepository {
         observations,
       );
 
+      if (options?.signal?.aborted) {
+        throw cancelledOcrError();
+      }
       const update = await transaction.run(
         'UPDATE receipts SET raw_ocr_text = ?, updated_at = ? WHERE id = ?;',
         [document.rawText, now, receiptId],
@@ -81,6 +108,9 @@ export class OcrRepository {
 
       if (update.changes !== 1) {
         throw new Error(`Receipt not found: ${receiptId}`);
+      }
+      if (options?.signal?.aborted) {
+        throw cancelledOcrError();
       }
     });
 

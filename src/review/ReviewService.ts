@@ -51,6 +51,17 @@ export class ReviewService {
           ? [receipt.imageUri]
           : [];
 
+    const bufferedDraft = await this.receipts.getReviewEditBuffer(receiptId);
+    if (bufferedDraft) {
+      return {
+        receipt,
+        sourceImageUris,
+        rawOcrText: receipt.rawOcrText ?? '',
+        draft: bufferedDraft,
+        evaluation: evaluateReviewDraft(bufferedDraft, now),
+      };
+    }
+
     if (receipt.status === 'review') {
       const stored = await this.receipts.getReviewDataForReceipt(receipt);
       const draft = createReviewDraftFromStored(stored);
@@ -113,13 +124,14 @@ export class ReviewService {
   ): Promise<ReviewSession> {
     const evaluation = evaluateReviewDraft(draft, now);
 
-    if (evaluation.inputErrors.length > 0) {
-      throw new Error('Correct invalid review fields before saving the draft.');
+    // Keep the exact typed text durable even when incomplete/invalid. Only
+    // a valid draft may update structured review rows.
+    await this.receipts.storeReviewEditBuffer(receiptId, draft, now.toISOString());
+    if (evaluation.inputErrors.length === 0) {
+      await this.receipts.replaceReviewData(
+        buildPersistenceInput(receiptId, draft, evaluation, now.toISOString()),
+      );
     }
-
-    await this.receipts.replaceReviewData(
-      buildPersistenceInput(receiptId, draft, evaluation, now.toISOString()),
-    );
 
     const [receipt, pages] = await Promise.all([
       this.receipts.getById(receiptId),

@@ -84,6 +84,18 @@ describe('ReceiptRepository review integrity', () => {
     expect(review?.adjustments[0]?.kind).toBe('tax');
   });
 
+  it('rejects direct acceptance from draft or processing states', async () => {
+    await repository.createDraft({ id: 'unreviewed', now });
+    const input = {
+      receiptId: 'unreviewed', validationState: 'verified' as const,
+      lineItems: [], adjustments: [], now,
+    };
+    await expect(repository.saveAcceptedReview(input)).rejects.toThrow(
+      'current review draft',
+    );
+    expect((await repository.getById('unreviewed'))?.status).toBe('draft');
+  });
+
   it('accepts the final reviewed values and children in one transaction', async () => {
     await repository.createDraft({ id: 'receipt-1', now });
     await repository.replaceReviewData({

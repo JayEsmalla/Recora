@@ -1,3 +1,4 @@
+import type { ReviewDraft } from '../../review/types';
 import type {
   AdjustmentKind,
   Receipt,
@@ -344,6 +345,47 @@ export class ReceiptRepository {
     }
   }
 
+  async storeReviewEditBuffer(
+    receiptId: string,
+    draft: ReviewDraft,
+    now: string,
+  ): Promise<void> {
+    const serialized = JSON.stringify(draft);
+    if (serialized.length > 1_048_576 || draft.items.length > 500 ||
+        draft.adjustments.length > 500) {
+      throw new Error('This review draft exceeds the local save limit.');
+    }
+
+    const result = await this.database.run(
+      `INSERT INTO review_edit_buffers (receipt_id, draft_json, updated_at)
+       SELECT id, ?, ? FROM receipts
+       WHERE id = ? AND status IN ('draft', 'processing', 'review')
+       ON CONFLICT(receipt_id) DO UPDATE
+       SET draft_json = excluded.draft_json, updated_at = excluded.updated_at;`,
+      [serialized, now, receiptId],
+    );
+    if (result.changes !== 1) {
+      throw new Error('Only an unfinished receipt can save review edits.');
+    }
+  }
+
+  async getReviewEditBuffer(receiptId: string): Promise<ReviewDraft | null> {
+    const row = await this.database.first<{ draft_json: string }>(
+      'SELECT draft_json FROM review_edit_buffers WHERE receipt_id = ?;',
+      [receiptId],
+    );
+    if (!row) return null;
+    try {
+      const draft: unknown = JSON.parse(row.draft_json);
+      if (!isReviewDraft(draft)) {
+        return null;
+      }
+      return draft;
+    } catch {
+      return null;
+    }
+  }
+
   async replaceReviewData(input: ReplaceReviewDataInput): Promise<void> {
     await this.database.transaction(async (transaction) => {
       await writeReviewData(transaction, input, 'review', [
@@ -351,16 +393,24 @@ export class ReceiptRepository {
         'processing',
         'review',
       ]);
+      await transaction.run('DELETE FROM review_edit_buffers WHERE receipt_id = ?;', [
+        input.receiptId,
+      ]);
     });
   }
 
   async saveAcceptedReview(input: ReplaceReviewDataInput): Promise<void> {
     await this.database.transaction(async (transaction) => {
-      await writeReviewData(transaction, input, 'accepted', [
-        'draft',
-        'processing',
-        'review',
+      await writeReviewData(transaction, input, 'accepted', ['review']);
+      await transaction.run('DELETE FROM review_edit_buffers WHERE receipt_id = ?;', [
+        input.receiptId,
       ]);
+      await transaction.run(
+        `INSERT INTO receipt_maintenance_jobs (receipt_id, kind, created_at)
+         VALUES (?, 'apply_merchant_rules', ?)
+         ON CONFLICT(receipt_id) DO NOTHING;`,
+        [input.receiptId, input.now],
+      );
     });
   }
 
@@ -401,6 +451,35 @@ export class ReceiptRepository {
     const result = await this.database.run('DELETE FROM receipts WHERE id = ?;', [id]);
     return result.changes === 1;
   }
+}
+
+function isReviewDraft(value: unknown): value is ReviewDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<ReviewDraft>;
+  if (typeof draft.merchantName !== 'string' ||
+      typeof draft.purchasedAtText !== 'string' ||
+      typeof draft.subtotalText !== 'string' ||
+      typeof draft.totalText !== 'string' ||
+      !['purchase', 'return', 'refund', 'unknown'].includes(draft.transactionType ?? '') ||
+      !Array.isArray(draft.items) || !Array.isArray(draft.adjustments) ||
+      draft.items.length > 500 || draft.adjustments.length > 500) return false;
+
+  return draft.items.every((item) =>
+    item && typeof item.id === 'string' &&
+    typeof item.rawName === 'string' &&
+    typeof item.quantityText === 'string' &&
+    typeof item.unitPriceText === 'string' &&
+    typeof item.lineTotalText === 'string' &&
+    Array.isArray(item.observationIds) &&
+    item.observationIds.every((id: unknown) => typeof id === 'string'),
+  ) && draft.adjustments.every((item) =>
+    item && typeof item.id === 'string' &&
+    typeof item.label === 'string' &&
+    typeof item.amountText === 'string' &&
+    ['discount', 'tax', 'service', 'rounding', 'other'].includes(item.kind) &&
+    Array.isArray(item.observationIds) &&
+    item.observationIds.every((id: unknown) => typeof id === 'string'),
+  );
 }
 
 async function writeReviewData(

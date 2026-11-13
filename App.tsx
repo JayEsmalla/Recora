@@ -25,6 +25,7 @@ import {
   pruneOrphanedReceiptImages,
   removePrivateReceiptImage,
   retainPreparedReceiptImage,
+  finishRetainingReceiptImage,
 } from './src/capture/ReceiptImageStore';
 import type {
   PreparedReceiptImage,
@@ -146,6 +147,14 @@ export default function App() {
         setPendingReceipts(pending);
         setBootState('ready');
 
+        // Optional post-accept organization is durable, bounded, and retried
+        // after restart without delaying the first usable screen.
+        void createHistoryService()
+          .then((service) => service.processPendingMaintenance(5))
+          .catch(() => {
+            // The job remains in SQLite; do not include receipt data in logs.
+          });
+
         cleanupTimer = setTimeout(() => {
           if (!mounted) {
             return;
@@ -153,8 +162,13 @@ export default function App() {
 
           void repository
             .listImageUris()
-            .then((referencedUris) => {
-              pruneOrphanedReceiptImages(referencedUris);
+            .then(async () => {
+              // Refresh immediately before a synchronous prune. An older
+              // reference snapshot can otherwise delete a newly saved page.
+              const currentUris = await repository.listImageUris();
+              if (mounted) {
+                pruneOrphanedReceiptImages(currentUris);
+              }
             })
             .catch((error) => {
               console.warn('Recora startup storage cleanup could not finish.', error);
@@ -298,6 +312,8 @@ export default function App() {
         });
       }
 
+      finishRetainingReceiptImage(retained.uri);
+
       const nextPageCount = pagePosition + 1;
       const [nextSource, ...remainingQueue] = queuedSources;
 
@@ -321,6 +337,7 @@ export default function App() {
     } catch (error) {
       if (retained) {
         removePrivateReceiptImage(retained.uri);
+        finishRetainingReceiptImage(retained.uri);
       }
       throw error;
     }
