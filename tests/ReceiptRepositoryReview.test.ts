@@ -136,6 +136,22 @@ describe('ReceiptRepository review integrity', () => {
       now,
     });
 
+    const job = await database.first<{ receipt_id: string }>(
+      "SELECT receipt_id FROM receipt_maintenance_jobs WHERE receipt_id = 'receipt-1';",
+    );
+    expect(job?.receipt_id).toBe('receipt-1');
+    await expect(repository.saveAcceptedReview({
+      receiptId: 'receipt-1',
+      validationState: 'verified',
+      lineItems: [],
+      adjustments: [],
+      now,
+    })).rejects.toThrow('current review draft');
+    const jobs = await database.all(
+      "SELECT receipt_id FROM receipt_maintenance_jobs WHERE receipt_id = 'receipt-1';",
+    );
+    expect(jobs).toHaveLength(1);
+
     const review = await repository.getReviewData('receipt-1');
     expect(review?.receipt.status).toBe('accepted');
     expect(review?.receipt.merchantRawName).toBe('Final Store');

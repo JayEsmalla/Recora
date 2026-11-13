@@ -57,6 +57,16 @@ Traditional network load balancing, Redis, server autoscaling, and Kubernetes ar
 
 Do not claim real-device success, zero security advisories, or a final store-ready release until these open gates are demonstrated.
 
+### Verification outcome (November 14, 2026, Asia/Manila)
+
+- `npm run qa`: **passed** (service-level offline, parser and geometry checks).
+- `npm run check`: **passed** (TypeScript, ESLint and complete automated suite after the migration/acceptance tests).
+- `npx expo export --platform android`: **passed** (Android JavaScript/Hermes bundle).
+- Android native compilation: **not run** because this Windows host has Java but lacks the Android SDK and its environment configuration.
+- ADB and physical device: **unavailable**. No ML Kit native execution, cold-start device benchmark, low-memory scan, real camera, or Android system permission behavior has been proven.
+- Dependency audit: **12 advisories remain, 2 classified high** in the Expo transitive tree. `node-forge` was advanced to a patched compatible version; the two remaining high findings require an upstream/compatibility security decision.
+- This record supports *automated engineering validation*, not a release-ready declaration.
+
 ## Versioned migration verification
 
 Migration 5 is additive: existing receipts and pages remain untouched. On upgrade, confirm rows and foreign keys remain intact, migration bookkeeping is idempotent, optional maintenance jobs are created only for newly accepted receipts, and deleting a receipt cascades its buffered edits and maintenance job. Rollback must not accept an invalid receipt or overwrite existing raw OCR evidence.

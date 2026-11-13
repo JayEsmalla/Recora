@@ -26,6 +26,33 @@ describe('database migrations', () => {
     expect(row?.count).toBe(5);
   });
 
+  it('migrates local edit buffers and post-accept jobs with cascade cleanup', async () => {
+    const now = '2026-10-03T00:00:00.000Z';
+    await database.run(
+      `INSERT INTO receipts (id, status, created_at, updated_at)
+       VALUES ('migration-draft', 'draft', ?, ?);`,
+      [now, now],
+    );
+    await database.run(
+      `INSERT INTO review_edit_buffers (receipt_id, draft_json, updated_at)
+       VALUES ('migration-draft', '{}', ?);`,
+      [now],
+    );
+    await database.run(
+      `INSERT INTO receipt_maintenance_jobs (receipt_id, created_at)
+       VALUES ('migration-draft', ?);`,
+      [now],
+    );
+    expect((await database.all('PRAGMA foreign_key_check;'))).toEqual([]);
+    await database.run("DELETE FROM receipts WHERE id = 'migration-draft';");
+    expect(await database.first(
+      "SELECT receipt_id FROM review_edit_buffers WHERE receipt_id = 'migration-draft';",
+    )).toBeNull();
+    expect(await database.first(
+      "SELECT receipt_id FROM receipt_maintenance_jobs WHERE receipt_id = 'migration-draft';",
+    )).toBeNull();
+  });
+
   it('installs ordered receipt-page storage with a five-photo limit', async () => {
     const columns = await database.all<{ name: string }>(
       'PRAGMA table_info(receipt_pages);',

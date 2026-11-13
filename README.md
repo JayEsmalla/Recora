@@ -51,6 +51,8 @@ History + search + item price history
 
 OCR is only one stage of the system. Recora's main value is the combination of **structured reconstruction, validation, transparent uncertainty, user review, and searchable purchase history**.
 
+For detailed backend safety, workload controls, recovery, security findings, and remaining device release gates, see [Backend stabilization and release evidence](docs/BACKEND_STABILIZATION.md). The offline JavaScript/service checks do not prove native camera and bundled-ML-Kit performance on physical devices.
+
 ## Main features
 
 ### Receipt capture and preparation
