@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { selectOrphanedReceiptImageUris } from './imageCleanup';
+import { isAppOwnedFileUri } from './ownedFileUris';
 import type { PreparedReceiptImage, ReceiptImageSource } from './types';
 
 const ROOT_DIRECTORY = 'recora';
@@ -75,6 +76,10 @@ export async function retainPreparedReceiptImage(
 }
 
 export function removePrivateReceiptImage(uri: string): boolean {
+  const recoraRoot = new Directory(Paths.document, ROOT_DIRECTORY);
+  if (!isAppOwnedFileUri(uri, recoraRoot.uri, Paths.cache.uri)) {
+    return false;
+  }
   pendingRetainedImageUris.delete(uri);
   try {
     const file = new File(uri);

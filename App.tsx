@@ -32,6 +32,7 @@ import type {
   ReceiptImageSource,
 } from './src/capture/types';
 import { openRecoraDatabase } from './src/data/database/openDatabase';
+import { recordLocalFailure } from './src/data/LocalDiagnostics';
 import {
   OcrRepository,
   type StoredOcrRun,
@@ -141,7 +142,7 @@ export default function App() {
         try {
           clearStagedReceiptImages();
         } catch (error) {
-          console.warn('Recora staging cleanup could not finish.', error);
+          recordLocalFailure('cleanup', error);
         }
 
         setPendingReceipts(pending);
@@ -151,8 +152,8 @@ export default function App() {
         // after restart without delaying the first usable screen.
         void createHistoryService()
           .then((service) => service.processPendingMaintenance(5))
-          .catch(() => {
-            // The job remains in SQLite; do not include receipt data in logs.
+          .catch((error) => {
+            recordLocalFailure('maintenance', error);
           });
 
         cleanupTimer = setTimeout(() => {
@@ -171,7 +172,7 @@ export default function App() {
               }
             })
             .catch((error) => {
-              console.warn('Recora startup storage cleanup could not finish.', error);
+              recordLocalFailure('cleanup', error);
             });
         }, 250);
 
@@ -188,7 +189,7 @@ export default function App() {
         }
       })
       .catch((error) => {
-        console.error('Recora database initialization failed.', error);
+        recordLocalFailure('startup', error);
         if (mounted) {
           setBootState('error');
         }
@@ -324,7 +325,7 @@ export default function App() {
       setQueuedSources(remainingQueue);
 
       void refreshPendingReceipts().catch((error) => {
-        console.warn('Could not refresh unfinished receipts after capture.', error);
+        recordLocalFailure('capture', error);
       });
 
       if (nextSource) {
@@ -372,7 +373,7 @@ export default function App() {
       }
 
       void refreshPendingReceipts().catch((error) => {
-        console.warn('Could not refresh unfinished receipts after OCR.', error);
+        recordLocalFailure('ocr', error);
       });
       await openReview(receiptId, run);
     } catch (error) {
@@ -491,7 +492,7 @@ export default function App() {
         .listNormalizedItems()
         .then(setNormalizedItems)
         .catch((error) => {
-          console.warn('Could not refresh normalized item suggestions.', error);
+          recordLocalFailure('history', error);
         });
     } catch (error) {
       clearTimeout(loadingTimer);
@@ -560,7 +561,7 @@ export default function App() {
       .listNormalizedItems()
       .then(setNormalizedItems)
       .catch((error) => {
-        console.warn('Could not refresh normalized item suggestions.', error);
+        recordLocalFailure('history', error);
       });
     return detail;
   }
@@ -633,7 +634,7 @@ export default function App() {
       setReviewSession(session);
       setScreen('review');
       void refreshPendingReceipts().catch((error) => {
-        console.warn('Could not refresh unfinished receipts after review load.', error);
+        recordLocalFailure('review', error);
       });
     } catch (error) {
       if (loadingTimer) {
@@ -661,7 +662,7 @@ export default function App() {
     const session = await service.saveDraft(receiptId, draft);
     setReviewSession(session);
     void refreshPendingReceipts().catch((error) => {
-      console.warn('Could not refresh unfinished receipts after draft save.', error);
+      recordLocalFailure('review', error);
     });
     return session;
   }
@@ -689,14 +690,11 @@ export default function App() {
     void createHistoryService()
       .then((history) => history.applyKnownRules(receiptId))
       .catch((error) => {
-        console.warn(
-          'Accepted receipt was saved, but local normalization rules could not be applied.',
-          error,
-        );
+        recordLocalFailure('maintenance', error);
       });
 
     void refreshPendingReceipts().catch((error) => {
-      console.warn('Could not refresh unfinished receipts after save.', error);
+      recordLocalFailure('review', error);
     });
   }
 
@@ -718,7 +716,7 @@ export default function App() {
     setMessage(null);
     setScreen('home');
     void refreshPendingReceipts().catch((error) => {
-      console.warn('Could not refresh unfinished receipts after discard.', error);
+      recordLocalFailure('review', error);
     });
   }
 

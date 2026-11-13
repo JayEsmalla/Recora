@@ -27,6 +27,9 @@
     "react-native": "0.86.3",
     "rn-mlkit-ocr": "^0.3.1"
   },
+  "overrides": {
+    "node-forge": "^1.4.3"
+  },
   "devDependencies": {
     "@types/react": "~19.2.2",
     "@types/sql.js": "^1.4.11",
