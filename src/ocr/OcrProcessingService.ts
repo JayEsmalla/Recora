@@ -3,6 +3,7 @@ import type {
   OcrRepository,
   StoredOcrRun,
 } from '../data/repositories/OcrRepository';
+import { BoundedWorkQueue } from './BoundedWorkQueue';
 import { mergeOcrDocuments } from './mergeOcrDocuments';
 import { redactSensitiveOcr } from './redactSensitiveOcr';
 import type { OcrDocument, OcrEngine } from './types';
@@ -31,6 +32,7 @@ export interface ProcessReceiptOcrInput {
 // Prevent simultaneous native OCR work on the same logical receipt, even
 // when separate service instances are created by navigation/retry handlers.
 const activeReceiptJobs = new Set<string>();
+const nativeOcrQueue = new BoundedWorkQueue(1, 2);
 
 function throwIfCancelled(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -122,12 +124,15 @@ export class OcrProcessingService {
       const page = pages[index]!;
       emit('recognizing-text', index, pages.length);
 
-      const document = await this.engine.recognize(
-        {
-          uri: page.imageUri,
-          width: page.imageWidth,
-          height: page.imageHeight,
-        },
+      const document = await nativeOcrQueue.run(
+        () => this.engine.recognize(
+          {
+            uri: page.imageUri,
+            width: page.imageWidth,
+            height: page.imageHeight,
+          },
+          input.signal,
+        ),
         input.signal,
       );
 
