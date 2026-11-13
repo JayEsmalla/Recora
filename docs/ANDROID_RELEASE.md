@@ -35,7 +35,9 @@ eas build --platform android --profile preview --non-interactive
 
 To inspect the latest signed preview build:
 
-https://expo.dev/accounts/ywach/projects/recora/builds
+https://expo.dev/accounts/ywach/projects/recora/builds/c2f0ecea-54d8-483d-9f30-af9b487cf3e4
+
+Build ID: `c2f0ecea-54d8-483d-9f30-af9b487cf3e4` (submitted for the Android safe-area corrected source revision `814a454`). This was queued when last checked; check the build page for completion and APK availability.
 
 When it reaches `FINISHED`, download the binary from the build page's artifact link and install it on a test device. The cloud build generated and retains Android signing credentials in the Expo account; do not commit or publish private signing files.
 
