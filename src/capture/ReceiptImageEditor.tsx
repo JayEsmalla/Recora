@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
 
@@ -36,6 +37,7 @@ import type {
   ReceiptImageSource,
 } from './types';
 import { colors, radii, shadows, spacing, typography } from '../ui/theme';
+import { responsiveLayout } from '../ui/responsiveLayout';
 
 interface ReceiptImageEditorProps {
   source: ReceiptImageSource;
@@ -52,7 +54,7 @@ interface DisplayRect {
   height: number;
 }
 
-const HANDLE_SIZE = 30;
+const HANDLE_SIZE = 44;
 
 export function ReceiptImageEditor({
   source,
@@ -61,6 +63,8 @@ export function ReceiptImageEditor({
   onCancel,
   onReady,
 }: ReceiptImageEditorProps) {
+  const { width, height, fontScale } = useWindowDimensions();
+  const layout = responsiveLayout(width, height, fontScale);
   const [image, setImage] = useState(source);
   const [crop, setCrop] = useState<NormalizedCrop>(FULL_IMAGE_CROP);
   const [container, setContainer] = useState({ width: 0, height: 0 });
@@ -166,7 +170,7 @@ export function ReceiptImageEditor({
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingHorizontal: layout.horizontalPadding }]}
       bounces={false}
       showsVerticalScrollIndicator={false}
     >
@@ -196,7 +200,7 @@ export function ReceiptImageEditor({
         Drag the corners to keep all the receipt text in this photo. Leave out the background.
       </Text>
 
-      <View style={styles.imageStage} onLayout={handleLayout}>
+      <View style={[styles.imageStage, { height: layout.cropStageHeight }]} onLayout={handleLayout}>
         <Image
           accessibilityLabel="Receipt image being cropped"
           source={{ uri: image.uri }}
@@ -532,6 +536,7 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+    minWidth: 0,
   },
   eyebrow: {
     color: colors.primaryAlt,
@@ -551,6 +556,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   linkButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: 8,
     paddingVertical: 6,
   },

@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import type {
@@ -19,6 +20,7 @@ import type {
   ReceiptHistoryDetail,
 } from './types';
 import { colors, radii, shadows, spacing, typography } from '../ui/theme';
+import { responsiveLayout } from '../ui/responsiveLayout';
 
 interface ReceiptDetailScreenProps {
   initialDetail: ReceiptHistoryDetail;
@@ -48,6 +50,8 @@ export function ReceiptDetailScreen({
   onOpenItemHistory,
   onBack,
 }: ReceiptDetailScreenProps) {
+  const { width, height, fontScale } = useWindowDimensions();
+  const layout = responsiveLayout(width, height, fontScale);
   const [detail, setDetail] = useState(initialDetail);
   const [visibleItemCount, setVisibleItemCount] = useState(
     Math.min(30, initialDetail.items.length),
@@ -206,7 +210,7 @@ export function ReceiptDetailScreen({
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingHorizontal: layout.horizontalPadding }]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
@@ -220,7 +224,7 @@ export function ReceiptDetailScreen({
       <Text style={styles.title}>{detail.merchantName || 'Unknown merchant'}</Text>
       <Text style={styles.date}>{formatDate(detail.purchasedAt)}</Text>
 
-      <View style={styles.totalCard}>
+      <View style={[styles.totalCard, layout.stackSummary && styles.stackedSummary]}>
         <View style={styles.totalCopy}>
           <Text style={styles.totalLabel}>TOTAL</Text>
           <Text style={styles.totalValue}>
@@ -243,7 +247,7 @@ export function ReceiptDetailScreen({
         </View>
       </View>
 
-      <View style={styles.summaryCard}>
+      <View style={[styles.summaryCard, layout.stackSummary && styles.stackedSummary]}>
         <SummaryValue
           label="Subtotal"
           value={formatMoney(detail.subtotalMinor, detail.currencyCode)}
@@ -259,7 +263,7 @@ export function ReceiptDetailScreen({
 
         {detail.items.slice(0, visibleItemCount).map((item) => (
           <View key={item.lineItemId} style={styles.itemCard}>
-            <View style={styles.itemHeader}>
+            <View style={[styles.itemHeader, layout.stackSummary && styles.stackedSummary]}>
               <View style={styles.itemCopy}>
                 <Text style={styles.itemTitle}>
                   {item.normalizedName || item.rawName}
@@ -487,7 +491,7 @@ export function ReceiptDetailScreen({
                     }
                     source={{ uri: imageUri }}
                     resizeMode="contain"
-                    style={styles.receiptImage}
+                    style={[styles.receiptImage, { height: layout.evidenceImageHeight }]}
                   />
                 </View>
               ))
@@ -664,7 +668,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     ...shadows.card,
   },
-  totalCopy: { flex: 1 },
+  totalCopy: { flex: 1, minWidth: 0 },
   totalLabel: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 10,
@@ -688,6 +692,7 @@ const styles = StyleSheet.create({
   statusMismatch: { backgroundColor: 'rgba(201,74,74,0.58)' },
   statusPillText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
   summaryCard: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.sm },
+  stackedSummary: { flexDirection: 'column', alignItems: 'stretch' },
   summaryValue: {
     flex: 1,
     padding: 12,
@@ -722,7 +727,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   itemHeader: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  itemCopy: { flex: 1 },
+  itemCopy: { flex: 1, minWidth: 0 },
   itemTitle: { color: colors.text, fontSize: 14, fontWeight: '900' },
   rawName: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   itemMeta: {
@@ -744,7 +749,7 @@ const styles = StyleSheet.create({
   },
   lineMoney: { color: colors.text, fontSize: 13, fontWeight: '900' },
   itemActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  textButton: { paddingVertical: 5 },
+  textButton: { minHeight: 44, paddingVertical: 8, paddingHorizontal: 3, justifyContent: 'center' },
   textButtonText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
   removeText: { color: colors.error, fontSize: 11, fontWeight: '900' },
   organizeCard: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E3E5E1' },
@@ -769,7 +774,7 @@ const styles = StyleSheet.create({
   suggestions: { marginTop: 8 },
   fieldLabel: { color: '#454A46', fontSize: 10, fontWeight: '900', marginTop: 10, marginBottom: 5 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 9, borderRadius: 999, borderWidth: 1, borderColor: '#CCD0CC', backgroundColor: '#FFFFFF' },
+  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 9, borderRadius: 999, borderWidth: 1, borderColor: '#CCD0CC', backgroundColor: '#FFFFFF' },
   chipSelected: {
     backgroundColor: colors.accentSoft,
     borderColor: colors.accent,
@@ -784,7 +789,7 @@ const styles = StyleSheet.create({
   learningHint: { color: '#818681', fontSize: 10, lineHeight: 15, marginTop: 5, marginLeft: 31 },
   organizeActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   primarySmall: {
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: radii.sm,
     paddingHorizontal: 13,
     backgroundColor: colors.primary,
@@ -795,7 +800,7 @@ const styles = StyleSheet.create({
   },
   primarySmallText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
   secondarySmall: {
-    minHeight: 40,
+    minHeight: 44,
     borderRadius: radii.sm,
     paddingHorizontal: 13,
     borderWidth: 1,
@@ -803,7 +808,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondarySmallText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
-  adjustmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#ECEDE9' },
+  adjustmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#ECEDE9' },
   adjustmentLabel: { color: colors.text, fontSize: 13, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
   chevron: { color: colors.textMuted, fontSize: 22 },

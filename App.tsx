@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import {
@@ -71,6 +72,7 @@ import { ReviewService } from './src/review/ReviewService';
 import type { ReviewDraft, ReviewSession } from './src/review/types';
 import { BrandMark } from './src/ui/BrandMark';
 import { colors, radii, shadows, spacing, typography } from './src/ui/theme';
+import { responsiveLayout } from './src/ui/responsiveLayout';
 
 type BootState = 'loading' | 'ready' | 'error';
 type AppScreen =
@@ -92,6 +94,8 @@ type AppScreen =
   | 'item-history';
 
 export default function App() {
+  const dimensions = useWindowDimensions();
+  const layout = responsiveLayout(dimensions.width, dimensions.height, dimensions.fontScale);
   const [bootState, setBootState] = useState<BootState>('loading');
   const [screen, setScreen] = useState<AppScreen>('home');
   const [source, setSource] = useState<ReceiptImageSource | null>(null);
@@ -804,13 +808,13 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <ActivityIndicator size="large" />
           <Text style={styles.bootTitle}>Building your receipt</Text>
           <Text style={styles.centeredBody}>
             Organizing items and checking totals.
           </Text>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -839,7 +843,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <Text style={styles.errorMark}>!</Text>
           <Text style={styles.bootTitle}>Receipt review could not open</Text>
           <Text style={styles.centeredBody}>
@@ -862,7 +866,7 @@ export default function App() {
           >
             <Text style={styles.secondaryWideButtonText}>Back to home</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -871,7 +875,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <View style={styles.successMark}>
             <Text style={styles.successMarkText}>✓</Text>
           </View>
@@ -893,7 +897,7 @@ export default function App() {
           >
             <Text style={styles.secondaryWideButtonText}>Back to home</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -906,11 +910,11 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <ActivityIndicator size="large" />
           <Text style={styles.bootTitle}>Opening purchase history</Text>
           <Text style={styles.centeredBody}>Loading reviewed receipts.</Text>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -919,7 +923,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <Text style={styles.errorMark}>!</Text>
           <Text style={styles.bootTitle}>Purchase history could not open</Text>
           <Text style={styles.centeredBody}>
@@ -940,7 +944,7 @@ export default function App() {
           >
             <Text style={styles.secondaryWideButtonText}>Back to home</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1004,7 +1008,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <BrandMark size={72} />
           <ActivityIndicator
             color={colors.primary}
@@ -1025,7 +1029,7 @@ export default function App() {
           >
             <Text style={styles.secondaryWideButtonText}>Cancel recognition</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1034,7 +1038,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <Text style={styles.errorMark}>!</Text>
           <Text style={styles.bootTitle}>Couldn’t read this receipt</Text>
           <Text style={styles.centeredBody}>
@@ -1057,7 +1061,7 @@ export default function App() {
           >
             <Text style={styles.secondaryWideButtonText}>Back to draft</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1068,7 +1072,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
-        <View style={styles.centeredPage}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
           <View style={styles.successMark}>
             <Ionicons name="images-outline" size={28} color={colors.success} />
           </View>
@@ -1096,7 +1100,7 @@ export default function App() {
           {message ? <InlineError message={message} /> : null}
 
           {remainingPhotos > 0 ? (
-            <View style={styles.addPhotoRow}>
+            <View style={[styles.addPhotoRow, layout.stackActionButtons && styles.addPhotoStack]}>
               <Pressable
                 accessibilityRole="button"
                 onPress={() =>
@@ -1158,7 +1162,7 @@ export default function App() {
           >
             <Text style={styles.secondaryWideButtonText}>Finish later (save draft)</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1167,11 +1171,11 @@ export default function App() {
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView
-        contentContainerStyle={styles.homePage}
+        contentContainerStyle={[styles.homePage, { paddingHorizontal: layout.horizontalPadding }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brandRow}>
-          <BrandMark size={86} />
+          <BrandMark size={layout.veryCompact ? 66 : 86} />
           <View style={styles.brandCopy}>
             <Text style={styles.brandName}>RECORA</Text>
             <Text style={styles.brandTag}>Private receipt organizer</Text>
@@ -1291,7 +1295,7 @@ function BootScreen({ state }: { state: BootState }) {
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
-      <View style={styles.centeredPage}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.centeredPage} showsVerticalScrollIndicator={false}>
         {state === 'loading' ? (
           <>
             <BrandMark size={88} />
@@ -1314,7 +1318,7 @@ function BootScreen({ state }: { state: BootState }) {
             </Text>
           </>
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -1411,7 +1415,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
   centeredPage: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 28,
     alignItems: 'center',
@@ -1424,6 +1428,7 @@ const styles = StyleSheet.create({
   },
   brandCopy: {
     flex: 1,
+    minWidth: 0,
   },
   brandName: {
     color: colors.primary,
@@ -1523,6 +1528,7 @@ const styles = StyleSheet.create({
   },
   scanCopy: {
     flex: 1,
+    minWidth: 0,
   },
   scanPrimaryTitle: {
     color: '#FFFFFF',
@@ -1604,6 +1610,7 @@ const styles = StyleSheet.create({
   pageDotFilled: {
     backgroundColor: colors.primary,
   },
+  addPhotoStack: { flexDirection: 'column' },
   addPhotoRow: {
     width: '100%',
     flexDirection: 'row',
@@ -1647,6 +1654,8 @@ const styles = StyleSheet.create({
   },
   secondaryWideButton: {
     width: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     minHeight: 52,
     borderRadius: radii.md,
     borderWidth: 1,

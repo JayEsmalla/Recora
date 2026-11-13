@@ -11,6 +11,7 @@ import {
 
 import type { ItemHistorySummary } from './types';
 import { colors, radii, shadows, spacing, typography } from '../ui/theme';
+import { responsiveLayout } from '../ui/responsiveLayout';
 
 interface ItemHistoryScreenProps {
   summary: ItemHistorySummary;
@@ -23,7 +24,8 @@ export function ItemHistoryScreen({
   onOpenReceipt,
   onBack,
 }: ItemHistoryScreenProps) {
-  const { width } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  const layout = responsiveLayout(width, height, fontScale);
   const title =
     summary.identity.normalizedName ||
     summary.identity.rawName ||
@@ -35,7 +37,7 @@ export function ItemHistoryScreen({
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingHorizontal: layout.horizontalPadding }]}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.topRow}>
@@ -47,7 +49,7 @@ export function ItemHistoryScreen({
 
       <Text style={styles.title}>{title}</Text>
 
-      <View style={[styles.summaryRow, width < 370 && styles.summaryColumn]}>
+      <View style={[styles.summaryRow, layout.stackSummary && styles.summaryColumn]}>
         <SummaryBox
           label="Purchases"
           value={String(summary.purchaseCount)}
@@ -77,7 +79,7 @@ export function ItemHistoryScreen({
             key={point.lineItemId}
             accessibilityRole="button"
             onPress={() => onOpenReceipt(point.receiptId)}
-            style={styles.historyRow}
+            style={[styles.historyRow, layout.stackActionButtons && styles.stackedHistoryRow]}
           >
             <View style={styles.historyCopy}>
               <Text style={styles.historyTitle}>
@@ -245,6 +247,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: colors.text, ...typography.section },
   sectionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 3 },
+  stackedHistoryRow: { flexDirection: 'column', alignItems: 'stretch' },
   historyRow: {
     minHeight: 60,
     flexDirection: 'row',
@@ -253,11 +256,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#ECEDE9',
   },
-  historyCopy: { flex: 1 },
+  historyCopy: { flex: 1, minWidth: 0 },
   historyTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
   historyMeta: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 3 },
   rawName: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  priceCopy: { alignItems: 'flex-end' },
+  priceCopy: { alignItems: 'flex-end', flexShrink: 1 },
   price: { color: colors.text, fontSize: 13, fontWeight: '900' },
   priceLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   chevron: { color: colors.textMuted, fontSize: 18, marginTop: 3 },

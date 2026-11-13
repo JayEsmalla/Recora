@@ -18,6 +18,7 @@ import {
 import type { AdjustmentKind, TransactionType, ValidationState } from '../domain/receipt';
 import type { ValidationIssue } from '../validation/types';
 import { colors, radii, shadows, spacing, typography } from '../ui/theme';
+import { responsiveLayout } from '../ui/responsiveLayout';
 import {
   createBlankAdjustment,
   createBlankReviewItem,
@@ -62,8 +63,9 @@ export function ReceiptReviewScreen({
   onDiscard,
   onBack,
 }: ReceiptReviewScreenProps) {
-  const { width } = useWindowDimensions();
-  const compact = width < 390;
+  const { width, height, fontScale } = useWindowDimensions();
+  const layout = responsiveLayout(width, height, fontScale);
+  const compact = layout.compact;
   const [draft, setDraft] = useState(initialSession.draft);
   const [acknowledgeReview, setAcknowledgeReview] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
@@ -259,7 +261,7 @@ export function ReceiptReviewScreen({
         keyboardDismissMode="on-drag"
         ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingHorizontal: layout.horizontalPadding }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -824,21 +826,14 @@ export function ReceiptReviewScreen({
       </Pressable>
       </ScrollView>
 
-      <View style={styles.actionBar}>
+      <View style={[styles.actionBar, layout.stackActionButtons && styles.stackedActionBar, { paddingHorizontal: layout.horizontalPadding }]}>
         <Pressable
           accessibilityRole="button"
           onPress={saveDraft}
-          disabled={
-            busyAction !== null ||
-            validationPending ||
-            evaluation.inputErrors.length > 0
-          }
+          disabled={busyAction !== null}
           style={[
             styles.footerSecondaryButton,
-            (busyAction !== null ||
-              validationPending ||
-              evaluation.inputErrors.length > 0) &&
-              styles.disabledButton,
+            busyAction !== null && styles.disabledButton,
           ]}
         >
           {busyAction === 'draft' ? <ActivityIndicator /> : null}
@@ -1146,7 +1141,7 @@ const styles = StyleSheet.create({
   chipText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   chipTextSelected: { color: colors.primary, fontWeight: '900' },
   moneyRow: { flexDirection: 'row', gap: 10 },
-  moneyColumn: { flex: 1 },
+  moneyColumn: { flex: 1, minWidth: 0 },
   smallButton: {
     minHeight: 44,
     justifyContent: 'center',
@@ -1174,11 +1169,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: '#FBFCFA',
   },
-  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   itemTitle: { color: colors.text, fontSize: 14, fontWeight: '900' },
   threeColumnRow: { flexDirection: 'row', gap: 7 },
   stackedFields: { flexDirection: 'column' },
-  flexField: { flex: 1 },
+  flexField: { flex: 1, minWidth: 0 },
   removeButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 6, paddingVertical: 8 },
   removeButtonText: { color: colors.error, fontSize: 12, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
@@ -1216,6 +1211,7 @@ const styles = StyleSheet.create({
   errorBox: { marginTop: 14, backgroundColor: colors.errorSoft, borderRadius: radii.md, padding: 12 },
   errorTitle: { color: colors.error, fontSize: 12, fontWeight: '900', marginBottom: 4 },
   errorText: { color: colors.error, fontSize: 12, lineHeight: 18 },
+  stackedActionBar: { flexDirection: 'column' },
   actionBar: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -1229,6 +1225,7 @@ const styles = StyleSheet.create({
   footerSecondaryButton: {
     minWidth: 112,
     minHeight: 50,
+    flexShrink: 1,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.borderStrong,
@@ -1240,6 +1237,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   footerSecondaryText: {
+    textAlign: 'center',
+    flexShrink: 1,
     color: colors.primary,
     fontSize: 13,
     fontWeight: '900',
@@ -1257,6 +1256,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   footerPrimaryText: {
+    textAlign: 'center',
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',

@@ -25,6 +25,7 @@ import { colors, radii, shadows, spacing, typography } from '../ui/theme';
 import { HISTORY_PAGE_SIZE } from './paginateHistory';
 import { validateHistoryDateRange } from './validateHistoryDateRange';
 import { useAccessibleFade } from '../ui/useAccessibleFade';
+import { responsiveLayout } from '../ui/responsiveLayout';
 
 interface HistoryScreenProps {
   initialOverview: HistoryOverview;
@@ -64,7 +65,8 @@ export function HistoryScreen({
   onOpenItem,
   onBack,
 }: HistoryScreenProps) {
-  const { width } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  const layout = responsiveLayout(width, height, fontScale);
   const [overview, setOverview] = useState(initialViewState?.overview ?? initialOverview);
   const [mode, setMode] = useState<HistoryMode>(initialViewState?.mode ?? 'receipts');
   const [itemsLoaded, setItemsLoaded] = useState(
@@ -246,7 +248,7 @@ export function HistoryScreen({
           scrollRef.current?.scrollTo({ y: initialViewState.scrollOffset, animated: false });
         }
       }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingHorizontal: layout.horizontalPadding }]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
@@ -352,7 +354,7 @@ export function HistoryScreen({
                 }}
               />
             </View>
-            <View style={[styles.twoColumn, width < 390 && styles.stackedInputs]}>
+            <View style={[styles.twoColumn, layout.compact && styles.stackedInputs]}>
               <TextInput
                 accessibilityLabel="Start date"
                 value={fromDate}
@@ -872,7 +874,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     ...shadows.card,
   },
-  resultCopy: { flex: 1 },
+  resultCopy: { flex: 1, minWidth: 0 },
   resultTitle: { color: colors.text, fontSize: 15, fontWeight: '900', flexShrink: 1 },
   rawName: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   resultMeta: {
@@ -892,7 +894,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
-  resultRight: { alignItems: 'flex-end', gap: 5, maxWidth: '45%' },
+  resultRight: { alignItems: 'flex-end', gap: 5, maxWidth: '45%', flexShrink: 1 },
   money: { color: colors.text, fontSize: 14, fontWeight: '900' },
   chevron: { color: colors.textMuted, fontSize: 22 },
   emptyCard: {
