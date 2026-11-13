@@ -1,5 +1,6 @@
 import { HistoryRepository } from './HistoryRepository';
 import { NormalizationService } from './NormalizationService';
+import { HISTORY_PAGE_SIZE } from './paginateHistory';
 import type {
   CategoryOption,
   HistoryFilters,
@@ -14,6 +15,8 @@ export interface HistoryOverview {
   receipts: ReceiptHistoryEntry[];
   items: ItemSearchEntry[];
   categories: CategoryOption[];
+  receiptTotal: number;
+  itemTotal: number;
 }
 
 export type HistoryLoadMode = 'receipts' | 'items' | 'both';
@@ -29,17 +32,20 @@ export class HistoryService {
     mode: HistoryLoadMode = 'both',
     includeCategories = true,
   ): Promise<HistoryOverview> {
-    const [receipts, items, categories] = await Promise.all([
+    const pagedFilters = { limit: HISTORY_PAGE_SIZE, offset: 0, ...filters };
+    const [receipts, items, categories, receiptTotal, itemTotal] = await Promise.all([
       mode === 'items'
         ? Promise.resolve([])
-        : this.repository.listReceipts(filters),
+        : this.repository.listReceipts(pagedFilters),
       mode === 'receipts'
         ? Promise.resolve([])
-        : this.repository.searchItems(filters),
+        : this.repository.searchItems(pagedFilters),
       includeCategories ? this.repository.listCategories() : Promise.resolve([]),
+      mode === 'items' ? Promise.resolve(0) : this.repository.countReceipts(filters),
+      mode === 'receipts' ? Promise.resolve(0) : this.repository.countItems(filters),
     ]);
 
-    return { receipts, items, categories };
+    return { receipts, items, categories, receiptTotal, itemTotal };
   }
 
   getReceiptDetail(receiptId: string): Promise<ReceiptHistoryDetail | null> {

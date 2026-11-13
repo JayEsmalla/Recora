@@ -51,64 +51,7 @@ export class HistoryRepository {
   async listReceipts(
     filters: HistoryFilters = {},
   ): Promise<ReceiptHistoryEntry[]> {
-    const clauses = ["r.status = 'accepted'"];
-    const params: DatabaseValue[] = [];
-
-    if (filters.merchantQuery?.trim()) {
-      clauses.push(
-        "COALESCE(r.merchant_raw_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
-      );
-      params.push(likePattern(filters.merchantQuery));
-    }
-
-    if (filters.fromDate?.trim()) {
-      clauses.push('COALESCE(r.purchased_at, r.created_at) >= ?');
-      params.push(filters.fromDate.trim());
-    }
-
-    if (filters.toDate?.trim()) {
-      clauses.push('COALESCE(r.purchased_at, r.created_at) <= ?');
-      params.push(normalizeRangeEnd(filters.toDate.trim()));
-    }
-
-    if (filters.categoryId) {
-      clauses.push(
-        [
-          'EXISTS (',
-          '  SELECT 1',
-          '  FROM line_items li_filter',
-          '  LEFT JOIN normalized_items ni_filter',
-          '    ON ni_filter.id = li_filter.normalized_item_id',
-          '  WHERE li_filter.receipt_id = r.id',
-          '    AND COALESCE(li_filter.category_id, ni_filter.category_id) = ?',
-          ')',
-        ].join('\n'),
-      );
-      params.push(filters.categoryId);
-    }
-
-    if (filters.query?.trim()) {
-      const query = likePattern(filters.query);
-      clauses.push(
-        [
-          '(',
-          "  COALESCE(r.merchant_raw_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
-          '  OR EXISTS (',
-          '    SELECT 1',
-          '    FROM line_items li_search',
-          '    LEFT JOIN normalized_items ni_search',
-          '      ON ni_search.id = li_search.normalized_item_id',
-          '    WHERE li_search.receipt_id = r.id',
-          '      AND (',
-          "        li_search.raw_name LIKE ? ESCAPE '\\' COLLATE NOCASE",
-          "        OR COALESCE(ni_search.canonical_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
-          '      )',
-          '  )',
-          ')',
-        ].join('\n'),
-      );
-      params.push(query, query, query);
-    }
+    const { clauses, params } = receiptConditions(filters);
 
     const rows = await this.database.all<ReceiptHistoryRow>(
       [
@@ -125,13 +68,22 @@ export class HistoryRepository {
         'LEFT JOIN line_items li ON li.receipt_id = r.id',
         'WHERE ' + clauses.join(' AND '),
         'GROUP BY r.id',
-        'ORDER BY COALESCE(r.purchased_at, r.created_at) DESC, r.created_at DESC',
-        'LIMIT ?;',
+        'ORDER BY COALESCE(r.purchased_at, r.created_at) DESC, r.created_at DESC, r.id DESC',
+        'LIMIT ? OFFSET ?;',
       ].join('\n'),
-      [...params, boundedLimit(filters.limit, 100)],
+      [...params, boundedLimit(filters.limit, 100), boundedOffset(filters.offset)],
     );
 
     return rows.map(mapReceiptHistory);
+  }
+
+  async countReceipts(filters: HistoryFilters = {}): Promise<number> {
+    const { clauses, params } = receiptConditions(filters);
+    const row = await this.database.first<{ total: number }>(
+      'SELECT COUNT(*) AS total FROM receipts r WHERE ' + clauses.join(' AND ') + ';',
+      params,
+    );
+    return Number(row?.total ?? 0);
   }
 
   async getReceiptDetail(
@@ -230,43 +182,7 @@ export class HistoryRepository {
   async searchItems(
     filters: HistoryFilters = {},
   ): Promise<ItemSearchEntry[]> {
-    const clauses = ["r.status = 'accepted'"];
-    const params: DatabaseValue[] = [];
-
-    if (filters.query?.trim()) {
-      const query = likePattern(filters.query);
-      clauses.push(
-        [
-          '(',
-          "  li.raw_name LIKE ? ESCAPE '\\' COLLATE NOCASE",
-          "  OR COALESCE(ni.canonical_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
-          ')',
-        ].join('\n'),
-      );
-      params.push(query, query);
-    }
-
-    if (filters.merchantQuery?.trim()) {
-      clauses.push(
-        "COALESCE(r.merchant_raw_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
-      );
-      params.push(likePattern(filters.merchantQuery));
-    }
-
-    if (filters.categoryId) {
-      clauses.push('COALESCE(li.category_id, ni.category_id) = ?');
-      params.push(filters.categoryId);
-    }
-
-    if (filters.fromDate?.trim()) {
-      clauses.push('COALESCE(r.purchased_at, r.created_at) >= ?');
-      params.push(filters.fromDate.trim());
-    }
-
-    if (filters.toDate?.trim()) {
-      clauses.push('COALESCE(r.purchased_at, r.created_at) <= ?');
-      params.push(normalizeRangeEnd(filters.toDate.trim()));
-    }
+    const { clauses, params } = itemConditions(filters);
 
     const rows = await this.database.all<ItemSearchRow>(
       [
@@ -292,10 +208,10 @@ export class HistoryRepository {
         'LEFT JOIN categories c',
         '  ON c.id = COALESCE(li.category_id, ni.category_id)',
         'WHERE ' + clauses.join(' AND '),
-        'ORDER BY COALESCE(r.purchased_at, r.created_at) DESC, li.position ASC',
-        'LIMIT ?;',
+        'ORDER BY COALESCE(r.purchased_at, r.created_at) DESC, li.position ASC, li.id ASC',
+        'LIMIT ? OFFSET ?;',
       ].join('\n'),
-      [...params, boundedLimit(filters.limit, 200)],
+      [...params, boundedLimit(filters.limit, 200), boundedOffset(filters.offset)],
     );
 
     return rows.map((row) => ({
@@ -304,6 +220,20 @@ export class HistoryRepository {
       purchasedAt: row.purchased_at,
       currencyCode: row.currency_code,
     }));
+  }
+
+  async countItems(filters: HistoryFilters = {}): Promise<number> {
+    const { clauses, params } = itemConditions(filters);
+    const row = await this.database.first<{ total: number }>(
+      [
+        'SELECT COUNT(*) AS total FROM line_items li',
+        'JOIN receipts r ON r.id = li.receipt_id',
+        'LEFT JOIN normalized_items ni ON ni.id = li.normalized_item_id',
+        'WHERE ' + clauses.join(' AND ') + ';',
+      ].join('\n'),
+      params,
+    );
+    return Number(row?.total ?? 0);
   }
 
   async getItemHistory(input: {
@@ -932,6 +862,115 @@ function normalizeRangeEnd(value: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
     ? value + 'T23:59:59.999'
     : value;
+}
+
+function receiptConditions(filters: HistoryFilters): { clauses: string[]; params: DatabaseValue[] } {
+    const clauses = ["r.status = 'accepted'"];
+    const params: DatabaseValue[] = [];
+
+    if (filters.merchantQuery?.trim()) {
+      clauses.push(
+        "COALESCE(r.merchant_raw_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
+      );
+      params.push(likePattern(filters.merchantQuery));
+    }
+
+    if (filters.fromDate?.trim()) {
+      clauses.push('COALESCE(r.purchased_at, r.created_at) >= ?');
+      params.push(filters.fromDate.trim());
+    }
+
+    if (filters.toDate?.trim()) {
+      clauses.push('COALESCE(r.purchased_at, r.created_at) <= ?');
+      params.push(normalizeRangeEnd(filters.toDate.trim()));
+    }
+
+    if (filters.categoryId) {
+      clauses.push(
+        [
+          'EXISTS (',
+          '  SELECT 1',
+          '  FROM line_items li_filter',
+          '  LEFT JOIN normalized_items ni_filter',
+          '    ON ni_filter.id = li_filter.normalized_item_id',
+          '  WHERE li_filter.receipt_id = r.id',
+          '    AND COALESCE(li_filter.category_id, ni_filter.category_id) = ?',
+          ')',
+        ].join('\n'),
+      );
+      params.push(filters.categoryId);
+    }
+
+    if (filters.query?.trim()) {
+      const query = likePattern(filters.query);
+      clauses.push(
+        [
+          '(',
+          "  COALESCE(r.merchant_raw_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
+          '  OR EXISTS (',
+          '    SELECT 1',
+          '    FROM line_items li_search',
+          '    LEFT JOIN normalized_items ni_search',
+          '      ON ni_search.id = li_search.normalized_item_id',
+          '    WHERE li_search.receipt_id = r.id',
+          '      AND (',
+          "        li_search.raw_name LIKE ? ESCAPE '\\' COLLATE NOCASE",
+          "        OR COALESCE(ni_search.canonical_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
+          '      )',
+          '  )',
+          ')',
+        ].join('\n'),
+      );
+      params.push(query, query, query);
+    }
+
+    return { clauses, params };
+}
+
+function itemConditions(filters: HistoryFilters): { clauses: string[]; params: DatabaseValue[] } {
+    const clauses = ["r.status = 'accepted'"];
+    const params: DatabaseValue[] = [];
+
+    if (filters.query?.trim()) {
+      const query = likePattern(filters.query);
+      clauses.push(
+        [
+          '(',
+          "  li.raw_name LIKE ? ESCAPE '\\' COLLATE NOCASE",
+          "  OR COALESCE(ni.canonical_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
+          ')',
+        ].join('\n'),
+      );
+      params.push(query, query);
+    }
+
+    if (filters.merchantQuery?.trim()) {
+      clauses.push(
+        "COALESCE(r.merchant_raw_name, '') LIKE ? ESCAPE '\\' COLLATE NOCASE",
+      );
+      params.push(likePattern(filters.merchantQuery));
+    }
+
+    if (filters.categoryId) {
+      clauses.push('COALESCE(li.category_id, ni.category_id) = ?');
+      params.push(filters.categoryId);
+    }
+
+    if (filters.fromDate?.trim()) {
+      clauses.push('COALESCE(r.purchased_at, r.created_at) >= ?');
+      params.push(filters.fromDate.trim());
+    }
+
+    if (filters.toDate?.trim()) {
+      clauses.push('COALESCE(r.purchased_at, r.created_at) <= ?');
+      params.push(normalizeRangeEnd(filters.toDate.trim()));
+    }
+
+    return { clauses, params };
+}
+
+function boundedOffset(value: number | undefined): number {
+  return Math.max(0, Math.min(1_000_000, Math.trunc(value ?? 0)));
 }
 
 function boundedLimit(value: number | undefined, max: number): number {

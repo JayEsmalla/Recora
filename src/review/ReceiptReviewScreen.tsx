@@ -1,7 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  BackHandler,
   Image,
   Pressable,
   ScrollView,
@@ -9,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
 
@@ -59,6 +62,8 @@ export function ReceiptReviewScreen({
   onDiscard,
   onBack,
 }: ReceiptReviewScreenProps) {
+  const { width } = useWindowDimensions();
+  const compact = width < 390;
   const [draft, setDraft] = useState(initialSession.draft);
   const [acknowledgeReview, setAcknowledgeReview] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
@@ -89,6 +94,32 @@ export function ReceiptReviewScreen({
     setNotice(null);
     setError(null);
   }
+
+  async function leaveWithSavedDraft() {
+    if (busyAction) {
+      return;
+    }
+
+    setBusyAction('draft');
+    setError(null);
+    try {
+      // A screen exit must never silently throw away the user's unsaved edits.
+      await onSaveDraft(draft);
+      onBack();
+    } catch (cause) {
+      setError(messageFromError(cause, 'Could not save your changes. Please try again before leaving.'));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  useEffect(() => {
+    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
+      void leaveWithSavedDraft();
+      return true;
+    });
+    return () => listener.remove();
+  });
 
   async function saveDraft() {
     if (busyAction) {
@@ -134,6 +165,25 @@ export function ReceiptReviewScreen({
     } finally {
       setBusyAction(null);
     }
+  }
+
+  function confirmDiscardReceipt() {
+    if (busyAction) {
+      return;
+    }
+
+    Alert.alert(
+      'Discard this receipt?',
+      'This removes the unfinished receipt and its photos from this device. This cannot be undone. Choose Save draft to keep your work.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard receipt',
+          style: 'destructive',
+          onPress: () => { void discardReceipt(); },
+        },
+      ],
+    );
   }
 
   async function discardReceipt() {
@@ -208,6 +258,7 @@ export function ReceiptReviewScreen({
   return (
     <View style={styles.screen}>
       <ScrollView
+        keyboardDismissMode="on-drag"
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -215,15 +266,15 @@ export function ReceiptReviewScreen({
         showsVerticalScrollIndicator={false}
       >
       <View style={styles.topRow}>
-        <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
-          <Text style={styles.linkText}>‹ Home</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Save draft and go home" onPress={() => void leaveWithSavedDraft()} disabled={busyAction !== null} style={styles.linkButton}>
+          <Text style={styles.linkText}>‹ Save & leave</Text>
         </Pressable>
         <Text style={styles.eyebrow}>REVIEW</Text>
       </View>
 
       <Text style={styles.title}>Review receipt</Text>
       <Text style={styles.body}>
-        Check highlighted fields before saving this purchase.
+        Check the store, date, items, and total. Fix any flagged details before saving.
       </Text>
 
       <StatusCard
@@ -310,7 +361,7 @@ export function ReceiptReviewScreen({
         >
           <FieldLabel
             label="Purchase date / time"
-            hint="Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS"
+            hint="Example: 2026-10-03. Add the time only if shown on the receipt."
           />
           <TextInput
             accessibilityLabel="Purchase date and time"
@@ -353,7 +404,7 @@ export function ReceiptReviewScreen({
           onLayout={(event) =>
             registerAnchor('receipt.amounts', event, 'receipt')
           }
-          style={styles.moneyRow}
+          style={[styles.moneyRow, compact && styles.stackedFields]}
         >
           <View
             onLayout={(event) =>
@@ -459,7 +510,7 @@ export function ReceiptReviewScreen({
                 ]}
               />
 
-              <View style={styles.threeColumnRow}>
+              <View style={[styles.threeColumnRow, compact && styles.stackedFields]}>
                 <View style={styles.flexField}>
                   <FieldLabel label="Qty" />
                   <TextInput
@@ -765,7 +816,7 @@ export function ReceiptReviewScreen({
 
       <Pressable
         accessibilityRole="button"
-        onPress={discardReceipt}
+        onPress={confirmDiscardReceipt}
         disabled={busyAction !== null}
         style={styles.discardButton}
       >
@@ -1069,13 +1120,13 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.text, ...typography.section },
   sectionHint: {
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
     marginTop: 3,
   },
   labelRow: { marginTop: 14, marginBottom: 6 },
-  fieldLabel: { color: '#3D423F', fontSize: 12, fontWeight: '800' },
-  fieldHint: { color: '#8A908B', fontSize: 10, marginTop: 2 },
+  fieldLabel: { color: '#3D423F', fontSize: 13, fontWeight: '800' },
+  fieldHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 2 },
   textInput: {
     minHeight: 48,
     borderRadius: radii.md,
@@ -1089,7 +1140,7 @@ const styles = StyleSheet.create({
   },
   invalidInput: { borderColor: colors.error },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  chip: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: '#CCD0CC', backgroundColor: '#FFFFFF' },
+  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: '#CCD0CC', backgroundColor: '#FFFFFF' },
   chipSelected: {
     backgroundColor: colors.accentSoft,
     borderColor: colors.accent,
@@ -1099,7 +1150,7 @@ const styles = StyleSheet.create({
   moneyRow: { flexDirection: 'row', gap: 10 },
   moneyColumn: { flex: 1 },
   smallButton: {
-    minHeight: 38,
+    minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 12,
     borderRadius: radii.sm,
@@ -1128,8 +1179,9 @@ const styles = StyleSheet.create({
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   itemTitle: { color: colors.text, fontSize: 14, fontWeight: '900' },
   threeColumnRow: { flexDirection: 'row', gap: 7 },
+  stackedFields: { flexDirection: 'column' },
   flexField: { flex: 1 },
-  removeButton: { alignSelf: 'flex-start', marginTop: 14, paddingVertical: 5 },
+  removeButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 6, paddingVertical: 8 },
   removeButtonText: { color: colors.error, fontSize: 12, fontWeight: '800' },
   evidenceHeader: { flexDirection: 'row', alignItems: 'center' },
   evidencePage: { marginTop: 14 },
@@ -1219,6 +1271,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
   },
-  discardButton: { alignSelf: 'center', marginTop: 16, padding: 10 },
+  discardButton: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', marginTop: 16, paddingHorizontal: 12 },
   discardButtonText: { color: colors.error, fontSize: 12, fontWeight: '800' },
 });

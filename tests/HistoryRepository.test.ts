@@ -87,6 +87,32 @@ describe('HistoryRepository', () => {
     expect(itemsOnly.categories).toEqual([]);
   });
 
+  it('paginates receipts and items using full filtered database totals', async () => {
+    const service = new HistoryService(
+      history,
+      new NormalizationService(history),
+    );
+
+    const firstReceipts = await service.loadOverview({ limit: 1, offset: 0 }, 'receipts', false);
+    const secondReceipts = await service.loadOverview({ limit: 1, offset: 1 }, 'receipts', false);
+
+    expect(firstReceipts.receiptTotal).toBe(2);
+    expect(secondReceipts.receiptTotal).toBe(2);
+    expect(firstReceipts.receipts.map((entry) => entry.receiptId)).toEqual(['receipt-new']);
+    expect(secondReceipts.receipts.map((entry) => entry.receiptId)).toEqual(['receipt-old']);
+
+    const filtered = await service.loadOverview(
+      { query: 'milk', limit: 1, offset: 1 }, 'items', false,
+    );
+    expect(filtered.itemTotal).toBe(2);
+    expect(filtered.items).toHaveLength(1);
+    expect(filtered.items[0]?.lineItemId).toBe('old-milk');
+
+    expect(await history.countReceipts({ merchantQuery: 'alpha' })).toBe(1);
+    expect(await history.countItems({ query: 'soap' })).toBe(1);
+    expect(await history.countItems({ query: 'missing' })).toBe(0);
+  });
+
   it('lists accepted receipts newest first and excludes unfinished drafts', async () => {
     const entries = await history.listReceipts();
 

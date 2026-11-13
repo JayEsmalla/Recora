@@ -1,13 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import type {
@@ -20,9 +22,14 @@ import type {
   HistoryOverview,
 } from './HistoryService';
 import { colors, radii, shadows, spacing, typography } from '../ui/theme';
+import { HISTORY_PAGE_SIZE } from './paginateHistory';
+import { validateHistoryDateRange } from './validateHistoryDateRange';
+import { useAccessibleFade } from '../ui/useAccessibleFade';
 
 interface HistoryScreenProps {
   initialOverview: HistoryOverview;
+  initialViewState?: HistoryViewState | null;
+  onSaveViewState: (state: HistoryViewState) => void;
   onSearch: (
     filters: HistoryFilters,
     mode: HistoryLoadMode,
@@ -32,39 +39,93 @@ interface HistoryScreenProps {
   onBack: () => void;
 }
 
-type HistoryMode = 'receipts' | 'items';
+export type HistoryMode = 'receipts' | 'items';
+
+export interface HistoryViewState {
+  overview: HistoryOverview;
+  mode: HistoryMode;
+  itemsLoaded: boolean;
+  query: string;
+  merchantQuery: string;
+  categoryId: string | null;
+  fromDate: string;
+  toDate: string;
+  filtersOpen: boolean;
+  page: number;
+  scrollOffset: number;
+}
 
 export function HistoryScreen({
   initialOverview,
+  initialViewState,
+  onSaveViewState,
   onSearch,
   onOpenReceipt,
   onOpenItem,
   onBack,
 }: HistoryScreenProps) {
-  const [overview, setOverview] = useState(initialOverview);
-  const [mode, setMode] = useState<HistoryMode>('receipts');
+  const { width } = useWindowDimensions();
+  const [overview, setOverview] = useState(initialViewState?.overview ?? initialOverview);
+  const [mode, setMode] = useState<HistoryMode>(initialViewState?.mode ?? 'receipts');
   const [itemsLoaded, setItemsLoaded] = useState(
-    initialOverview.items.length > 0,
+    initialViewState?.itemsLoaded ?? initialOverview.items.length > 0,
   );
-  const [query, setQuery] = useState('');
-  const [merchantQuery, setMerchantQuery] = useState('');
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [query, setQuery] = useState(initialViewState?.query ?? '');
+  const [merchantQuery, setMerchantQuery] = useState(initialViewState?.merchantQuery ?? '');
+  const [categoryId, setCategoryId] = useState<string | null>(initialViewState?.categoryId ?? null);
+  const [fromDate, setFromDate] = useState(initialViewState?.fromDate ?? '');
+  const [toDate, setToDate] = useState(initialViewState?.toDate ?? '');
+  const [filtersOpen, setFiltersOpen] = useState(initialViewState?.filtersOpen ?? false);
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState(initialViewState?.page ?? 1);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const resultsY = useRef(0);
+  const scrollOffset = useRef(initialViewState?.scrollOffset ?? 0);
+  const initialScrollRestored = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const advancedFiltersActive = Boolean(
     merchantQuery.trim() || categoryId || fromDate.trim() || toDate.trim(),
   );
   const hasFilters = Boolean(query.trim() || advancedFiltersActive);
+  const receiptPage = pageFromResults(overview.receipts, overview.receiptTotal, page);
+  const itemPage = pageFromResults(overview.items, overview.itemTotal, page);
+  const visiblePage = mode === 'receipts' ? receiptPage : itemPage;
+  const resultsOpacity = useAccessibleFade(`${mode}:${visiblePage.page}`);
+
+  function saveViewState() {
+    onSaveViewState({
+      overview, mode, itemsLoaded, query, merchantQuery, categoryId,
+      fromDate, toDate, filtersOpen, page, scrollOffset: scrollOffset.current,
+    });
+  }
+
+  function openReceipt(receiptId: string) {
+    saveViewState();
+    onOpenReceipt(receiptId);
+  }
+
+  function openItem(item: ItemSearchEntry) {
+    saveViewState();
+    onOpenItem(item);
+  }
+
+  async function changePage(nextPage: number) {
+    if (await search({}, mode, nextPage)) {
+      scrollOffset.current = Math.max(0, resultsY.current - 12);
+      scrollRef.current?.scrollTo({
+        y: scrollOffset.current,
+        animated: false,
+      });
+    }
+  }
 
   async function search(
     overrides: Partial<HistoryFilters> = {},
     targetMode: HistoryMode = mode,
-  ): Promise<void> {
+    targetPage = 1,
+  ): Promise<boolean> {
     if (busy) {
-      return;
+      return false;
     }
 
     const filters: HistoryFilters = {
@@ -74,7 +135,16 @@ export function HistoryScreen({
       fromDate: fromDate || null,
       toDate: toDate || null,
       ...overrides,
+      limit: HISTORY_PAGE_SIZE,
+      offset: (targetPage - 1) * HISTORY_PAGE_SIZE,
     };
+
+    const dateError = validateHistoryDateRange(filters.fromDate, filters.toDate);
+    if (dateError) {
+      setError(dateError);
+      setFiltersOpen(true);
+      return false;
+    }
 
     setBusy(true);
     setError(null);
@@ -85,12 +155,14 @@ export function HistoryScreen({
           ? {
               ...current,
               receipts: next.receipts,
+              receiptTotal: next.receiptTotal,
               categories:
                 next.categories.length > 0 ? next.categories : current.categories,
             }
           : {
               ...current,
               items: next.items,
+              itemTotal: next.itemTotal,
               categories:
                 next.categories.length > 0 ? next.categories : current.categories,
             },
@@ -98,26 +170,33 @@ export function HistoryScreen({
       if (targetMode === 'items') {
         setItemsLoaded(true);
       }
+      setPage(targetPage);
+      return true;
     } catch (cause) {
       setError(messageFromError(cause, 'Could not search local purchase history.'));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function selectCategory(nextCategoryId: string | null) {
+    if (busy) return;
     setCategoryId(nextCategoryId);
     await search({ categoryId: nextCategoryId });
   }
 
   function selectMode(nextMode: HistoryMode) {
-    setMode(nextMode);
-    if (nextMode === 'items' && !itemsLoaded) {
-      void search({}, 'items');
+    if (busy || nextMode === mode) {
+      return;
     }
+    setMode(nextMode);
+    setPage(1);
+    void search({}, nextMode, 1);
   }
 
   async function clearFilters() {
+    if (busy) return;
     setQuery('');
     setMerchantQuery('');
     setCategoryId(null);
@@ -132,12 +211,14 @@ export function HistoryScreen({
           ? {
               ...current,
               receipts: next.receipts,
+              receiptTotal: next.receiptTotal,
               categories:
                 next.categories.length > 0 ? next.categories : current.categories,
             }
           : {
               ...current,
               items: next.items,
+              itemTotal: next.itemTotal,
               categories:
                 next.categories.length > 0 ? next.categories : current.categories,
             },
@@ -145,6 +226,7 @@ export function HistoryScreen({
       if (mode === 'items') {
         setItemsLoaded(true);
       }
+      setPage(1);
     } catch (cause) {
       setError(messageFromError(cause, 'Could not reset history filters.'));
     } finally {
@@ -154,13 +236,22 @@ export function HistoryScreen({
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.screen}
+      onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={32}
+      onContentSizeChange={() => {
+        if (!initialScrollRestored.current && initialViewState?.scrollOffset) {
+          initialScrollRestored.current = true;
+          scrollRef.current?.scrollTo({ y: initialViewState.scrollOffset, animated: false });
+        }
+      }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.topRow}>
-        <Pressable accessibilityRole="button" onPress={onBack} style={styles.linkButton}>
+        <Pressable accessibilityRole="button" onPress={() => { saveViewState(); onBack(); }} style={styles.linkButton}>
           <Text style={styles.linkText}>‹ Home</Text>
         </Pressable>
         <Text style={styles.eyebrow}>HISTORY</Text>
@@ -168,7 +259,7 @@ export function HistoryScreen({
 
       <Text style={styles.title}>Purchase history</Text>
       <Text style={styles.body}>
-        Find reviewed receipts, items, and previous prices.
+        Look up past receipts, what you bought, and how prices changed.
       </Text>
 
       <View style={styles.modeRow}>
@@ -194,7 +285,7 @@ export function HistoryScreen({
           placeholder={
             mode === 'receipts'
               ? 'Search merchant or item'
-              : 'Search raw or organized item name'
+              : 'Search an item name'
           }
           style={styles.textInput}
         />
@@ -235,7 +326,7 @@ export function HistoryScreen({
 
         {filtersOpen ? (
           <View style={styles.filters}>
-            <Text style={styles.fieldLabel}>Merchant</Text>
+            <Text style={styles.fieldLabel}>Store name</Text>
             <TextInput
               accessibilityLabel="Merchant filter"
               value={merchantQuery}
@@ -244,13 +335,29 @@ export function HistoryScreen({
               style={styles.textInput}
             />
 
-            <Text style={styles.fieldLabel}>Date range</Text>
-            <View style={styles.twoColumn}>
+            <Text style={styles.fieldLabel}>Purchase dates</Text>
+            <Text style={styles.filterHint}>Enter dates as YYYY-MM-DD, for example 2026-10-03.</Text>
+            <View style={styles.chipRow}>
+              <FilterChip
+                label="Any date"
+                selected={!fromDate && !toDate}
+                onPress={() => { setFromDate(''); setToDate(''); }}
+              />
+              <FilterChip
+                label="This month"
+                selected={fromDate === currentMonthStart() && toDate === currentMonthEnd()}
+                onPress={() => {
+                  setFromDate(currentMonthStart());
+                  setToDate(currentMonthEnd());
+                }}
+              />
+            </View>
+            <View style={[styles.twoColumn, width < 390 && styles.stackedInputs]}>
               <TextInput
                 accessibilityLabel="Start date"
                 value={fromDate}
                 onChangeText={setFromDate}
-                placeholder="YYYY-MM-DD"
+                placeholder="From: YYYY-MM-DD"
                 autoCapitalize="none"
                 style={[styles.textInput, styles.flexInput]}
               />
@@ -258,7 +365,7 @@ export function HistoryScreen({
                 accessibilityLabel="End date"
                 value={toDate}
                 onChangeText={setToDate}
-                placeholder="YYYY-MM-DD"
+                placeholder="To: YYYY-MM-DD"
                 autoCapitalize="none"
                 style={[styles.textInput, styles.flexInput]}
               />
@@ -309,29 +416,69 @@ export function HistoryScreen({
         </View>
       ) : null}
 
-      {mode === 'receipts' ? (
-        <ReceiptList
-          receipts={overview.receipts}
-          hasFilters={hasFilters}
-          onOpenReceipt={onOpenReceipt}
-        />
-      ) : (
-        <ItemList
-          items={overview.items}
-          hasFilters={hasFilters}
-          onOpenItem={onOpenItem}
-        />
-      )}
+      <Animated.View style={{ opacity: resultsOpacity }} onLayout={(event) => { resultsY.current = event.nativeEvent.layout.y; }}>
+        {mode === 'receipts' ? (
+          <ReceiptList
+            receipts={receiptPage.entries}
+            total={receiptPage.total}
+            hasFilters={hasFilters}
+            onOpenReceipt={openReceipt}
+          />
+        ) : (
+          <ItemList
+            items={itemPage.entries}
+            total={itemPage.total}
+            hasFilters={hasFilters}
+            onOpenItem={openItem}
+          />
+        )}
+        {visiblePage.pageCount > 1 ? (
+          <View style={styles.pagination}>
+            <Text style={styles.paginationSummary} accessibilityLiveRegion="polite">
+              Showing {visiblePage.start}–{visiblePage.end} of {visiblePage.total}
+            </Text>
+            <View style={styles.paginationActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous page"
+                accessibilityState={{ disabled: visiblePage.page === 1 }}
+                disabled={busy || visiblePage.page === 1}
+                onPress={() => { void changePage(visiblePage.page - 1); }}
+                style={[styles.pageButton, visiblePage.page === 1 && styles.pageButtonDisabled]}
+              >
+                <Ionicons name="chevron-back" size={16} color={colors.primary} />
+                <Text style={styles.pageButtonText}>Previous</Text>
+              </Pressable>
+              <Text style={styles.pageNumber}>
+                {visiblePage.page} / {visiblePage.pageCount}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next page"
+                accessibilityState={{ disabled: visiblePage.page === visiblePage.pageCount }}
+                disabled={busy || visiblePage.page === visiblePage.pageCount}
+                onPress={() => { void changePage(visiblePage.page + 1); }}
+                style={[styles.pageButton, visiblePage.page === visiblePage.pageCount && styles.pageButtonDisabled]}
+              >
+                <Text style={styles.pageButtonText}>Next</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+      </Animated.View>
     </ScrollView>
   );
 }
 
 function ReceiptList({
   receipts,
+  total,
   hasFilters,
   onOpenReceipt,
 }: {
   receipts: ReceiptHistoryEntry[];
+  total: number;
   hasFilters: boolean;
   onOpenReceipt: (receiptId: string) => void;
 }) {
@@ -351,14 +498,14 @@ function ReceiptList({
   return (
     <View style={styles.resultSection}>
       <Text style={styles.resultCount}>
-        {receipts.length} receipt{receipts.length === 1 ? '' : 's'}
+        {total} receipt{total === 1 ? '' : 's'}
       </Text>
       {receipts.map((receipt) => (
         <Pressable
           key={receipt.receiptId}
           accessibilityRole="button"
           onPress={() => onOpenReceipt(receipt.receiptId)}
-          style={styles.resultCard}
+          style={({ pressed }) => [styles.resultCard, pressed && styles.pressedCard]}
         >
           <View style={styles.resultCopy}>
             <Text style={styles.resultTitle}>
@@ -390,10 +537,12 @@ function ReceiptList({
 
 function ItemList({
   items,
+  total,
   hasFilters,
   onOpenItem,
 }: {
   items: ItemSearchEntry[];
+  total: number;
   hasFilters: boolean;
   onOpenItem: (item: ItemSearchEntry) => void;
 }) {
@@ -413,14 +562,14 @@ function ItemList({
   return (
     <View style={styles.resultSection}>
       <Text style={styles.resultCount}>
-        {items.length} item purchase{items.length === 1 ? '' : 's'}
+        {total} item purchase{total === 1 ? '' : 's'}
       </Text>
       {items.map((item) => (
         <Pressable
           key={item.lineItemId}
           accessibilityRole="button"
           onPress={() => onOpenItem(item)}
-          style={styles.resultCard}
+          style={({ pressed }) => [styles.resultCard, pressed && styles.pressedCard]}
         >
           <View style={styles.resultCopy}>
             <Text style={styles.resultTitle}>
@@ -469,7 +618,7 @@ function ModeButton({
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={[styles.modeButton, selected && styles.modeButtonSelected]}
+      style={({ pressed }) => [styles.modeButton, selected && styles.modeButtonSelected, pressed && styles.pressedCard]}
     >
       <Text style={[styles.modeText, selected && styles.modeTextSelected]}>
         {label}
@@ -508,6 +657,25 @@ function EmptyState({ title, text }: { title: string; text: string }) {
       <Text style={styles.emptyText}>{text}</Text>
     </View>
   );
+}
+
+function pageFromResults<T>(entries: T[], total: number, requestedPage: number) {
+  const pageCount = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+  const page = Math.max(1, Math.min(pageCount, requestedPage));
+  return {
+    entries, total, page, pageCount,
+    start: total === 0 ? 0 : (page - 1) * HISTORY_PAGE_SIZE + 1,
+    end: Math.min(total, (page - 1) * HISTORY_PAGE_SIZE + entries.length),
+  };
+}
+
+function currentMonthStart(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function currentMonthEnd(now = new Date()): string {
+  const finalDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(finalDay).padStart(2, '0')}`;
 }
 
 function formatMoney(value: number | null, currencyCode: string): string {
@@ -618,7 +786,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   primarySmall: {
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: 11,
     paddingHorizontal: 14,
     backgroundColor: colors.primary,
@@ -629,7 +797,7 @@ const styles = StyleSheet.create({
   },
   primarySmallText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
   secondarySmall: {
-    minHeight: 42,
+    minHeight: 44,
     borderRadius: radii.md,
     paddingHorizontal: 14,
     borderWidth: 1,
@@ -655,10 +823,11 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   twoColumn: { flexDirection: 'row', gap: 8 },
+  stackedInputs: { flexDirection: 'column' },
   flexInput: { flex: 1 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   chip: {
-    minHeight: 34,
+    minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 10,
     borderRadius: 999,
@@ -680,7 +849,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorSoft,
   },
   errorText: { color: colors.error, fontSize: 12, lineHeight: 18 },
+  filterHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: spacing.sm },
   resultSection: { marginTop: spacing.lg, gap: spacing.sm },
+  pressedCard: { opacity: 0.78 },
+  pagination: { marginTop: spacing.lg, gap: spacing.sm, alignItems: 'center' },
+  paginationSummary: { color: colors.textMuted, fontSize: 13, fontWeight: '700' },
+  paginationActions: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+  pageButton: { minHeight: 46, minWidth: 104, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface, borderRadius: radii.md, flexDirection: 'row', gap: 4, alignItems: 'center', justifyContent: 'center' },
+  pageButtonDisabled: { opacity: 0.45 },
+  pageButtonText: { color: colors.primary, fontSize: 13, fontWeight: '800' },
+  pageNumber: { color: colors.text, fontSize: 13, fontWeight: '800' },
   resultCount: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   resultCard: {
     minHeight: 86,
@@ -695,11 +873,11 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   resultCopy: { flex: 1 },
-  resultTitle: { color: colors.text, fontSize: 15, fontWeight: '900' },
+  resultTitle: { color: colors.text, fontSize: 15, fontWeight: '900', flexShrink: 1 },
   rawName: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   resultMeta: {
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 13,
     lineHeight: 16,
     marginTop: 4,
   },
@@ -714,7 +892,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
-  resultRight: { alignItems: 'flex-end', gap: 5 },
+  resultRight: { alignItems: 'flex-end', gap: 5, maxWidth: '45%' },
   money: { color: colors.text, fontSize: 14, fontWeight: '900' },
   chevron: { color: colors.textMuted, fontSize: 22 },
   emptyCard: {

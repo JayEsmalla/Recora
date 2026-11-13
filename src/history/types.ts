@@ -11,6 +11,7 @@ export interface HistoryFilters {
   fromDate?: string | null;
   toDate?: string | null;
   limit?: number;
+  offset?: number;
 }
 
 export interface ReceiptHistoryEntry {

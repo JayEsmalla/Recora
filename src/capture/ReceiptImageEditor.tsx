@@ -193,7 +193,7 @@ export function ReceiptImageEditor({
       </View>
 
       <Text style={styles.instructions}>
-        Keep the header, every item, and the final total inside the crop.
+        Drag the corners to keep all the receipt text in this photo. Leave out the background.
       </Text>
 
       <View style={styles.imageStage} onLayout={handleLayout}>
@@ -342,7 +342,7 @@ export function ReceiptImageEditor({
       >
         {busy ? <ActivityIndicator color="#FFFFFF" /> : null}
         <Text style={styles.primaryButtonText}>
-          {busy ? 'Preparing…' : 'Use this receipt'}
+          {busy ? 'Preparing…' : 'Use this photo'}
         </Text>
       </Pressable>
     </ScrollView>

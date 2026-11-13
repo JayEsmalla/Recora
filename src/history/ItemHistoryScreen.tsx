@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 import type { ItemHistorySummary } from './types';
@@ -22,6 +23,7 @@ export function ItemHistoryScreen({
   onOpenReceipt,
   onBack,
 }: ItemHistoryScreenProps) {
+  const { width } = useWindowDimensions();
   const title =
     summary.identity.normalizedName ||
     summary.identity.rawName ||
@@ -45,7 +47,7 @@ export function ItemHistoryScreen({
 
       <Text style={styles.title}>{title}</Text>
 
-      <View style={styles.summaryRow}>
+      <View style={[styles.summaryRow, width < 370 && styles.summaryColumn]}>
         <SummaryBox
           label="Purchases"
           value={String(summary.purchaseCount)}
@@ -208,6 +210,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   summaryRow: { flexDirection: 'row', gap: 9, marginTop: 18 },
+  summaryColumn: { flexDirection: 'column' },
   summaryBox: {
     flex: 1,
     padding: 14,
@@ -217,7 +220,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.card,
   },
-  summaryLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
+  summaryLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
   summaryValue: {
     color: colors.text,
     fontSize: 17,
@@ -230,7 +233,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.accentSoft,
   },
-  rangeLabel: { color: colors.primaryAlt, fontSize: 10, fontWeight: '900' },
+  rangeLabel: { color: colors.primaryAlt, fontSize: 12, fontWeight: '900' },
   rangeValue: { color: colors.primary, fontSize: 12, fontWeight: '800', marginTop: 4 },
   section: {
     marginTop: spacing.lg,
@@ -243,6 +246,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.text, ...typography.section },
   sectionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 3 },
   historyRow: {
+    minHeight: 60,
     flexDirection: 'row',
     gap: 12,
     paddingVertical: 13,
@@ -251,14 +255,14 @@ const styles = StyleSheet.create({
   },
   historyCopy: { flex: 1 },
   historyTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
-  historyMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 3 },
-  rawName: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 3 },
+  historyMeta: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 3 },
+  rawName: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   priceCopy: { alignItems: 'flex-end' },
   price: { color: colors.text, fontSize: 13, fontWeight: '900' },
-  priceLabel: { color: colors.textMuted, fontSize: 9, marginTop: 2 },
+  priceLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   chevron: { color: colors.textMuted, fontSize: 18, marginTop: 3 },
   loadMoreButton: { minHeight: 44, marginTop: 10, borderRadius: radii.md, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  loadMoreText: { color: colors.primary, fontSize: 11, fontWeight: '900' },
+  loadMoreText: { color: colors.primary, fontSize: 13, fontWeight: '900' },
   infoCard: {
     marginTop: spacing.lg,
     padding: 14,
@@ -266,5 +270,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   infoTitle: { color: colors.primary, fontSize: 12, fontWeight: '900' },
-  infoText: { color: colors.textMuted, fontSize: 11, lineHeight: 17, marginTop: 4 },
+  infoText: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 4 },
 });

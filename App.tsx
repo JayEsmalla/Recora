@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -39,7 +40,7 @@ import {
   type UnfinishedReceiptSummary,
 } from './src/data/repositories/ReceiptRepository';
 import { HistoryRepository } from './src/history/HistoryRepository';
-import { HistoryScreen } from './src/history/HistoryScreen';
+import { HistoryScreen, type HistoryViewState } from './src/history/HistoryScreen';
 import {
   HistoryService,
   type HistoryLoadMode,
@@ -106,6 +107,8 @@ export default function App() {
     UnfinishedReceiptSummary[]
   >([]);
   const [historyOverview, setHistoryOverview] = useState<HistoryOverview | null>(null);
+  const [historyViewState, setHistoryViewState] = useState<HistoryViewState | null>(null);
+  const [itemHistoryBackTarget, setItemHistoryBackTarget] = useState<'history' | 'receipt-detail'>('history');
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [receiptDetail, setReceiptDetail] = useState<ReceiptHistoryDetail | null>(null);
   const [itemHistory, setItemHistory] = useState<ItemHistorySummary | null>(null);
@@ -415,6 +418,7 @@ export default function App() {
       return;
     }
 
+    setHistoryViewState(null);
     const loadingTimer = setTimeout(() => {
       setScreen('history-loading');
     }, 120);
@@ -484,6 +488,7 @@ export default function App() {
   async function openItemHistory(
     item: ItemSearchEntry | HistoryLineItem,
   ): Promise<void> {
+    setItemHistoryBackTarget(screen === 'receipt-detail' ? 'receipt-detail' : 'history');
     setHistoryError(null);
     const loadingTimer = setTimeout(() => {
       setScreen('item-history-loading');
@@ -717,6 +722,47 @@ export default function App() {
     setScreen('prepared');
   }
 
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'review') {
+        // Review owns its Back handler, which saves the current draft first.
+        return false;
+      }
+      if (screen === 'editing') {
+        cancelEditing();
+        return true;
+      }
+      if (screen === 'ocr-processing') {
+        cancelOfflineOcr();
+        return true;
+      }
+      if (screen === 'item-history') {
+        if (itemHistoryBackTarget === 'receipt-detail' && receiptDetail) {
+          setScreen('receipt-detail');
+        } else {
+          void openHistory();
+        }
+        return true;
+      }
+      if (screen === 'receipt-detail') {
+        void openHistory();
+        return true;
+      }
+      if (screen === 'history' || screen === 'prepared' ||
+          screen === 'saved' || screen === 'review-error' ||
+          screen === 'ocr-error' || screen === 'history-error') {
+        setScreen('home');
+        return true;
+      }
+      if (screen === 'home') {
+        return false;
+      }
+      // Avoid accidental app exit while a local operation is running.
+      return true;
+    });
+    return () => subscription.remove();
+  });
+
   if (bootState !== 'ready') {
     return <BootScreen state={bootState} />;
   }
@@ -814,16 +860,23 @@ export default function App() {
           <View style={styles.successMark}>
             <Text style={styles.successMarkText}>✓</Text>
           </View>
-          <Text style={styles.pageTitle}>Receipt saved</Text>
+          <Text style={styles.pageTitle}>Receipt saved!</Text>
           <Text style={styles.centeredBody}>
-            Added to your purchase history.
+            You can find this receipt anytime in Purchase history.
           </Text>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setScreen('home')}
+            onPress={openHistory}
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>Back to home</Text>
+            <Text style={styles.primaryButtonText}>View purchase history</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setScreen('home')}
+            style={styles.secondaryWideButton}
+          >
+            <Text style={styles.secondaryWideButtonText}>Back to home</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -883,6 +936,8 @@ export default function App() {
         <StatusBar style="dark" />
         <HistoryScreen
           initialOverview={historyOverview}
+          initialViewState={historyViewState}
+          onSaveViewState={setHistoryViewState}
           onSearch={searchHistory}
           onOpenReceipt={openReceiptDetail}
           onOpenItem={openItemHistory}
@@ -918,7 +973,13 @@ export default function App() {
         <ItemHistoryScreen
           summary={itemHistory}
           onOpenReceipt={openReceiptDetail}
-          onBack={openHistory}
+          onBack={() => {
+            if (itemHistoryBackTarget === 'receipt-detail' && receiptDetail) {
+              setScreen('receipt-detail');
+            } else {
+              void openHistory();
+            }
+          }}
         />
       </SafeAreaView>
     );
@@ -1001,8 +1062,8 @@ export default function App() {
           </Text>
           <Text style={styles.centeredBody}>
             {remainingPhotos > 0
-              ? 'For a long receipt, add the next section in order. A small overlap is okay. Exact duplicate-looking item rows are flagged so you can decide what to keep.'
-              : 'Maximum of 5 photos reached. Recora will read them in this order as one receipt.'}
+              ? 'Missing part of a long receipt? Add the next photo in order. Otherwise, tap Read receipt below.'
+              : 'All 5 photos are ready. Tap Read receipt to continue.'}
           </Text>
 
           <View style={styles.pageCountRow}>
@@ -1064,7 +1125,7 @@ export default function App() {
               style={styles.primaryButton}
             >
               <Text style={styles.primaryButtonText}>
-                Read {preparedPageCount > 1 ? preparedPageCount + ' photos' : 'receipt'}
+                Read receipt
               </Text>
             </Pressable>
           ) : null}
@@ -1080,7 +1141,7 @@ export default function App() {
             }}
             style={styles.secondaryWideButton}
           >
-            <Text style={styles.secondaryWideButtonText}>Save draft for later</Text>
+            <Text style={styles.secondaryWideButtonText}>Finish later (save draft)</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -1102,10 +1163,10 @@ export default function App() {
           </View>
         </View>
 
-        <Text style={styles.heroTitle}>Know what you bought.</Text>
+        <Text style={styles.heroTitle}>Remember every purchase.</Text>
         <Text style={styles.bodyText}>
-          Turn printed receipts into clean, searchable purchase records—right on
-          your device.
+          Take a photo of your receipt, check the details, and save it to find later.
+          No internet needed.
         </Text>
 
         <Pressable
@@ -1113,8 +1174,9 @@ export default function App() {
           onPress={() =>
             startCapture('camera', captureReceiptWithCamera)
           }
-          style={[
+          style={({ pressed }) => [
             styles.scanCard,
+            pressed && styles.pressedAction,
             captureAction !== null && styles.disabledButton,
           ]}
           disabled={captureAction !== null}
@@ -1124,10 +1186,10 @@ export default function App() {
           </View>
           <View style={styles.scanCopy}>
             <Text style={styles.scanPrimaryTitle}>
-              {captureAction === 'camera' ? 'Opening camera…' : 'Scan receipt'}
+              {captureAction === 'camera' ? 'Opening camera…' : 'Take receipt photo'}
             </Text>
             <Text style={styles.scanPrimarySubtitle}>
-              Use 1–5 photos for short or long receipts
+              Start with one photo. Add more if needed.
             </Text>
           </View>
           <Ionicons
@@ -1142,8 +1204,9 @@ export default function App() {
           onPress={() =>
             startCapture('library', importReceiptFromLibrary)
           }
-          style={[
+          style={({ pressed }) => [
             styles.importButton,
+            pressed && styles.pressedAction,
             captureAction !== null && styles.disabledButton,
           ]}
           disabled={captureAction !== null}
@@ -1152,36 +1215,11 @@ export default function App() {
           <Text style={styles.importButtonText}>
             {captureAction === 'library'
               ? 'Opening photos…'
-              : 'Import up to 5 photos'}
+              : 'Choose photos from phone'}
           </Text>
         </Pressable>
 
         {message ? <InlineError message={message} /> : null}
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={openHistory}
-          style={styles.historyCard}
-        >
-          <View style={styles.historyCardIcon}>
-            <Ionicons
-              name="receipt-outline"
-              size={24}
-              color={colors.primaryAlt}
-            />
-          </View>
-          <View style={styles.scanCopy}>
-            <Text style={styles.cardTitle}>Purchase history</Text>
-            <Text style={styles.cardSubtitle}>
-              Receipts, items, and price history
-            </Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={22}
-            color={colors.textMuted}
-          />
-        </Pressable>
 
         {pendingReceipts[0] ? (
           <View style={styles.foundationCard}>
@@ -1197,12 +1235,37 @@ export default function App() {
             <Pressable
               accessibilityRole="button"
               onPress={() => resumeReceipt(pendingReceipts[0]!)}
-              style={styles.resumeButton}
+              style={({ pressed }) => [styles.resumeButton, pressed && styles.pressedAction]}
             >
               <Text style={styles.resumeButtonText}>Resume receipt</Text>
             </Pressable>
           </View>
         ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={openHistory}
+          style={({ pressed }) => [styles.historyCard, pressed && styles.pressedAction]}
+        >
+          <View style={styles.historyCardIcon}>
+            <Ionicons
+              name="receipt-outline"
+              size={24}
+              color={colors.primaryAlt}
+            />
+          </View>
+          <View style={styles.scanCopy}>
+            <Text style={styles.cardTitle}>Purchase history</Text>
+            <Text style={styles.cardSubtitle}>
+              Find saved receipts, items, and prices
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color={colors.textMuted}
+          />
+        </Pressable>
 
       </ScrollView>
     </SafeAreaView>
@@ -1583,6 +1646,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
+  pressedAction: { opacity: 0.78 },
   disabledButton: {
     opacity: 0.7,
   },
