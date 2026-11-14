@@ -6,6 +6,8 @@
 
 **Recora is an offline-first mobile app that turns printed receipts into structured, validated, searchable purchase records.**
 
+**Android preview v0.1.0:** [Download the signed APK from GitHub Releases](https://github.com/JayEsmalla/Recora/releases/tag/v0.1.0). This is an internal-testing build; physical-device and real-receipt quality verification remain required.
+
 Instead of keeping paper receipts or manually typing every purchase, a user can photograph or import a receipt, review the reconstructed data, correct anything uncertain, and save the accepted receipt into a private local purchase history.
 
 Recora is built around one principle:
